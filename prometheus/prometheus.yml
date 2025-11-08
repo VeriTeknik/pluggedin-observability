@@ -1,0 +1,123 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'pluggedin-production'
+    environment: 'production'
+
+# Alertmanager configuration (optional, uncomment when ready)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # Traefik metrics
+  - job_name: 'traefik'
+    static_configs:
+      - targets: ['traefik:8080']
+        labels:
+          service: 'traefik'
+
+  # Node Exporter - System metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'system'
+
+  # cAdvisor - Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'containers'
+
+  # PostgreSQL Exporter
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+          instance: 'main'
+
+  # Plugged.in App (Next.js)
+  - job_name: 'pluggedin-app'
+    metrics_path: '/api/metrics'
+    scheme: 'https'
+    static_configs:
+      - targets: ['plugged.in']
+        labels:
+          service: 'pluggedin-app'
+          environment: 'production'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Registry Proxy (Node.js)
+  - job_name: 'registry-proxy'
+    metrics_path: '/metrics'
+    scheme: 'https'
+    static_configs:
+      - targets: ['registry.plugged.in']
+        labels:
+          service: 'registry-proxy'
+          environment: 'production'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # MCP Proxy (Node.js) - Future deployment
+  - job_name: 'mcp-proxy'
+    metrics_path: '/metrics'
+    scheme: 'https'
+    static_configs:
+      - targets: ['mcp.plugged.in']
+        labels:
+          service: 'mcp-proxy'
+          environment: 'production'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # RAG v3 Server (FastAPI)
+  - job_name: 'v3-server'
+    metrics_path: '/metrics'
+    scheme: 'http'
+    static_configs:
+      - targets: ['v3-server:8000']
+        labels:
+          service: 'rag-backend'
+          environment: 'production'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
+  # Grafana metrics
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+
+  # Loki metrics
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+        labels:
+          service: 'loki'
+
+# Remote storage configuration (optional - for long-term storage)
+# remote_write:
+#   - url: "https://prometheus-remote-write-endpoint"
+#     basic_auth:
+#       username: "user"
+#       password: "password"

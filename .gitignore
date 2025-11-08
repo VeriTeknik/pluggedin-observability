@@ -1,0 +1,32 @@
+# Environment variables
+.env
+
+# Docker volumes and data
+data/
+volumes/
+prometheus/data/
+grafana/data/
+loki/data/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets
+secrets/
+*.key
+*.pem
+
+# Backup files
+*.backup
+*.bak

@@ -1,0 +1,47 @@
+apiVersion: 1
+
+datasources:
+  # Prometheus - Metrics
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 15s
+      queryTimeout: 60s
+      httpMethod: POST
+    version: 1
+
+  # Loki - Logs
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        # Extract trace IDs from logs and link to Tempo
+        - datasourceUid: tempo
+          matcherRegex: "trace_id=(\\w+)"
+          name: TraceID
+          url: "$${__value.raw}"
+    version: 1
+
+  # PostgreSQL - Direct database access (optional, for custom queries)
+  # Uncomment and configure if needed
+  # - name: PostgreSQL
+  #   type: postgres
+  #   access: proxy
+  #   url: postgres:5432
+  #   database: pluggedin
+  #   user: ${POSTGRES_USER}
+  #   secureJsonData:
+  #     password: ${POSTGRES_PASSWORD}
+  #   editable: false
+  #   jsonData:
+  #     sslmode: disable
+  #     postgresVersion: 1500
+  #   version: 1

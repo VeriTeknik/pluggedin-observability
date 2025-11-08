@@ -1,0 +1,130 @@
+http:
+  middlewares:
+    # Basic Auth for sensitive endpoints
+    basic-auth:
+      basicAuth:
+        users:
+          # Prometheus admin password: Same as Grafana - see .env file (not committed to git)
+          # Generate new password: htpasswd -nbm admin yourpassword (without $$ escaping for static files)
+          - "admin:$apr1$CGY3sPO1$CySQqIeLYik4JWKF/Vs5H0"
+
+    # HTTP to HTTPS Redirect
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
+    # Security Headers
+    secure-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+    # Rate Limiting
+    rate-limit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+
+    # Strip path prefixes
+    prometheus-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/prometheus"
+
+    loki-stripprefix:
+      stripPrefix:
+        prefixes:
+          - "/loki"
+
+  routers:
+    # HTTP to HTTPS Redirects (lower priority to allow ACME challenges)
+    http-catchall:
+      rule: "Host(`monitoring.plugged.in`)"
+      entryPoints:
+        - web
+      middlewares:
+        - https-redirect
+      service: noop@internal
+      priority: 1
+
+    # Grafana - Main Dashboard
+    grafana:
+      rule: "Host(`monitoring.plugged.in`)"
+      service: grafana
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - secure-headers
+
+    # Prometheus - Metrics UI
+    prometheus:
+      rule: "Host(`monitoring.plugged.in`) && PathPrefix(`/prometheus`)"
+      service: prometheus
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - secure-headers
+        - basic-auth
+        - prometheus-stripprefix
+
+    # Loki - Log API
+    loki:
+      rule: "Host(`monitoring.plugged.in`) && PathPrefix(`/loki`)"
+      service: loki
+      entryPoints:
+        - websecure
+      tls:
+        certResolver: letsencrypt
+      middlewares:
+        - secure-headers
+        - rate-limit
+        - loki-stripprefix
+
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://grafana:3000"
+        healthCheck:
+          path: /api/health
+          interval: 30s
+          timeout: 5s
+
+    prometheus:
+      loadBalancer:
+        servers:
+          - url: "http://prometheus:9090"
+        healthCheck:
+          path: /-/healthy
+          interval: 30s
+          timeout: 5s
+
+    loki:
+      loadBalancer:
+        servers:
+          - url: "http://loki:3100"
+        healthCheck:
+          path: /ready
+          interval: 30s
+          timeout: 5s
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305
