@@ -172,7 +172,16 @@ This repository provides a complete observability stack for monitoring 10 distri
    - **LLM API Metrics**: OpenAI API calls by model, latency, error rates, token usage
    - **HTTP Traffic**: Request rate by endpoint/status, duration by endpoint, active requests
 
-3. **Node.js Services** (`pluggedin-nodejs`)
+3. **MCP Operations Dashboard** (`mcp-operations`) ⭐ **NEW**
+   - **Overview**: Active sessions, connections, OAuth sessions, session creation rate
+   - **Discovery Operations**: Discovery duration (p95/p50), capabilities discovered, failures, current capabilities
+   - **Session Management**: Active sessions by transport, session operations rate, session lifetime
+   - **Transport & Connections**: Active connections, connection establishment time, connection failures
+   - **OAuth Operations**: OAuth flow rate, flow duration, callback processing, active sessions by provider
+   - **Errors & Performance**: Errors by category, JSON-RPC errors, operation latency, tool invocation duration
+   - **Alerts**: 50+ comprehensive alert rules covering OAuth, discovery, sessions, transport, errors, and performance
+
+4. **Node.js Services** (`pluggedin-nodejs`)
    - Memory usage
    - CPU usage
    - Event loop lag
@@ -298,12 +307,21 @@ process_resident_memory_bytes / (1024^3)
 
 ### Pre-configured Alerts
 
-See `prometheus/rules/alerts.yml`:
+See `prometheus/rules/alerts.yml` and `prometheus/rules/mcp-alerts.yml`:
 
+**General Alerts** (`alerts.yml`):
 - Service down (any service)
 - High error rate (>5%)
 - High latency (p95 >2s)
 - High memory usage (>80%)
+
+**MCP Operations Alerts** (`mcp-alerts.yml`) ⭐ **NEW**:
+- **OAuth**: High failure rates, slow flows, callback failures
+- **Discovery**: High failure rates, slow operations, timeout errors
+- **Sessions**: Too many active sessions, low reuse rate, cleanup failures
+- **Transport**: High connection failures, slow establishment, timeouts
+- **Errors**: High error rates, critical errors, JSON-RPC errors
+- **Performance**: High operation latency, slow tool invocations
 - High CPU usage (>80%)
 - PostgreSQL connection pool exhausted
 - Slow database queries

@@ -1,0 +1,497 @@
+groups:
+  - name: mcp_oauth
+    interval: 30s
+    rules:
+      # High OAuth Failure Rate
+      - alert: HighMcpOAuthFailureRate
+        expr: |
+          (
+            sum(rate(mcp_oauth_flows_total{status="error"}[5m])) by (provider)
+            /
+            sum(rate(mcp_oauth_flows_total[5m])) by (provider)
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_oauth
+        annotations:
+          summary: "High OAuth failure rate for {{ $labels.provider }}"
+          description: "MCP OAuth failure rate for {{ $labels.provider }} is above 20% (current: {{ $value | humanizePercentage }})"
+
+      # Critical OAuth Failure Rate
+      - alert: CriticalMcpOAuthFailureRate
+        expr: |
+          (
+            sum(rate(mcp_oauth_flows_total{status="error"}[5m])) by (provider)
+            /
+            sum(rate(mcp_oauth_flows_total[5m])) by (provider)
+          ) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_oauth
+        annotations:
+          summary: "Critical OAuth failure rate for {{ $labels.provider }}"
+          description: "MCP OAuth failure rate for {{ $labels.provider }} is above 50% (current: {{ $value | humanizePercentage }})"
+
+      # Slow OAuth Flows
+      - alert: SlowMcpOAuthFlows
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_oauth_flow_duration_seconds_bucket{status="success"}[5m])) by (le, provider)
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_oauth
+        annotations:
+          summary: "Slow OAuth flows for {{ $labels.provider }}"
+          description: "p95 OAuth flow duration for {{ $labels.provider }} is above 30 seconds (current: {{ $value | humanizeDuration }})"
+
+      # High OAuth Callback Failures
+      - alert: HighMcpOAuthCallbackFailures
+        expr: |
+          (
+            sum(rate(mcp_oauth_callbacks_total{status!="success"}[5m])) by (provider)
+            /
+            sum(rate(mcp_oauth_callbacks_total[5m])) by (provider)
+          ) > 0.15
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_oauth
+        annotations:
+          summary: "High OAuth callback failures for {{ $labels.provider }}"
+          description: "OAuth callback failure rate for {{ $labels.provider }} is above 15% (current: {{ $value | humanizePercentage }})"
+
+      # No OAuth Activity
+      - alert: NoMcpOAuthActivity
+        expr: |
+          sum(rate(mcp_oauth_flows_total[10m])) == 0
+        for: 30m
+        labels:
+          severity: info
+          category: mcp_oauth
+        annotations:
+          summary: "No MCP OAuth activity"
+          description: "No OAuth flows have been initiated in the last 30 minutes"
+
+  - name: mcp_discovery
+    interval: 30s
+    rules:
+      # High Discovery Failure Rate
+      - alert: HighMcpDiscoveryFailureRate
+        expr: |
+          (
+            sum(rate(mcp_discovery_failures_total[5m])) by (operation, transport)
+            /
+            (sum(rate(mcp_discovery_failures_total[5m])) by (operation, transport) + sum(rate(mcp_discovery_duration_seconds_count{status="success"}[5m])) by (operation, transport))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_discovery
+        annotations:
+          summary: "High discovery failure rate for {{ $labels.operation }} ({{ $labels.transport }})"
+          description: "MCP {{ $labels.operation }} discovery failure rate is above 20% (current: {{ $value | humanizePercentage }})"
+
+      # Critical Discovery Failure Rate
+      - alert: CriticalMcpDiscoveryFailureRate
+        expr: |
+          (
+            sum(rate(mcp_discovery_failures_total[5m])) by (operation, transport)
+            /
+            (sum(rate(mcp_discovery_failures_total[5m])) by (operation, transport) + sum(rate(mcp_discovery_duration_seconds_count{status="success"}[5m])) by (operation, transport))
+          ) > 0.5
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_discovery
+        annotations:
+          summary: "Critical discovery failure rate for {{ $labels.operation }} ({{ $labels.transport }})"
+          description: "MCP {{ $labels.operation }} discovery failure rate is above 50% (current: {{ $value | humanizePercentage }})"
+
+      # Slow Discovery Operations
+      - alert: SlowMcpDiscoveryOperations
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_discovery_duration_seconds_bucket{status="success"}[5m])) by (le, operation, transport)
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_discovery
+        annotations:
+          summary: "Slow {{ $labels.operation }} discovery ({{ $labels.transport }})"
+          description: "p95 {{ $labels.operation }} discovery duration is above 10 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Very Slow Discovery Operations
+      - alert: VerySlowMcpDiscoveryOperations
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_discovery_duration_seconds_bucket{status="success"}[5m])) by (le, operation, transport)
+          ) > 30
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_discovery
+        annotations:
+          summary: "Very slow {{ $labels.operation }} discovery ({{ $labels.transport }})"
+          description: "p95 {{ $labels.operation }} discovery duration is above 30 seconds (current: {{ $value | humanizeDuration }})"
+
+      # High Timeout Error Rate
+      - alert: HighMcpDiscoveryTimeouts
+        expr: |
+          (
+            sum(rate(mcp_discovery_failures_total{error_type="timeout"}[5m])) by (operation)
+            /
+            sum(rate(mcp_discovery_failures_total[5m])) by (operation)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_discovery
+        annotations:
+          summary: "High timeout rate for {{ $labels.operation }} discovery"
+          description: "More than 50% of {{ $labels.operation }} discovery failures are timeouts"
+
+  - name: mcp_sessions
+    interval: 30s
+    rules:
+      # Too Many Active Sessions
+      - alert: TooManyMcpActiveSessions
+        expr: sum(mcp_sessions_active) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          category: mcp_sessions
+        annotations:
+          summary: "Too many active MCP sessions"
+          description: "More than 1000 active MCP sessions detected (current: {{ $value }})"
+
+      # Critical Active Sessions
+      - alert: CriticalMcpActiveSessions
+        expr: sum(mcp_sessions_active) > 5000
+        for: 5m
+        labels:
+          severity: critical
+          category: mcp_sessions
+        annotations:
+          summary: "Critical number of active MCP sessions"
+          description: "More than 5000 active MCP sessions detected (current: {{ $value }})"
+
+      # Low Session Reuse Rate
+      - alert: LowMcpSessionReuseRate
+        expr: |
+          (
+            sum(rate(mcp_sessions_reused_total[10m]))
+            /
+            (sum(rate(mcp_sessions_created_total[10m])) + sum(rate(mcp_sessions_reused_total[10m])))
+          ) < 0.3
+        for: 15m
+        labels:
+          severity: info
+          category: mcp_sessions
+        annotations:
+          summary: "Low MCP session reuse rate"
+          description: "Session reuse rate is below 30%, sessions might not be persisting correctly (current: {{ $value | humanizePercentage }})"
+
+      # Very Short Session Lifetime
+      - alert: VeryShortMcpSessionLifetime
+        expr: |
+          histogram_quantile(0.50,
+            sum(rate(mcp_session_lifetime_seconds_bucket[5m])) by (le, transport)
+          ) < 60
+        for: 10m
+        labels:
+          severity: warning
+          category: mcp_sessions
+        annotations:
+          summary: "Very short {{ $labels.transport }} session lifetime"
+          description: "Median {{ $labels.transport }} session lifetime is below 1 minute, sessions may be terminating prematurely (current: {{ $value | humanizeDuration }})"
+
+      # Session Cleanup Failures
+      - alert: McpSessionCleanupFailures
+        expr: |
+          (
+            sum(rate(mcp_session_cleanup_total{result="error"}[5m]))
+            /
+            sum(rate(mcp_session_cleanup_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_sessions
+        annotations:
+          summary: "MCP session cleanup failures"
+          description: "Session cleanup error rate is above 10% (current: {{ $value | humanizePercentage }})"
+
+  - name: mcp_transport
+    interval: 30s
+    rules:
+      # High Transport Connection Failures
+      - alert: HighMcpTransportConnectionFailures
+        expr: |
+          (
+            sum(rate(mcp_transport_connection_failures_total[5m])) by (transport)
+            /
+            (sum(rate(mcp_transport_connection_failures_total[5m])) by (transport) + sum(rate(mcp_transport_connection_duration_seconds_count{status="success"}[5m])) by (transport))
+          ) > 0.15
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_transport
+        annotations:
+          summary: "High connection failure rate for {{ $labels.transport }}"
+          description: "{{ $labels.transport }} connection failure rate is above 15% (current: {{ $value | humanizePercentage }})"
+
+      # Critical Transport Connection Failures
+      - alert: CriticalMcpTransportConnectionFailures
+        expr: |
+          (
+            sum(rate(mcp_transport_connection_failures_total[5m])) by (transport)
+            /
+            (sum(rate(mcp_transport_connection_failures_total[5m])) by (transport) + sum(rate(mcp_transport_connection_duration_seconds_count{status="success"}[5m])) by (transport))
+          ) > 0.4
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_transport
+        annotations:
+          summary: "Critical connection failure rate for {{ $labels.transport }}"
+          description: "{{ $labels.transport }} connection failure rate is above 40% (current: {{ $value | humanizePercentage }})"
+
+      # Slow Connection Establishment
+      - alert: SlowMcpConnectionEstablishment
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_transport_connection_duration_seconds_bucket{status="success"}[5m])) by (le, transport)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_transport
+        annotations:
+          summary: "Slow {{ $labels.transport }} connection establishment"
+          description: "p95 {{ $labels.transport }} connection time is above 5 seconds (current: {{ $value | humanizeDuration }})"
+
+      # High Timeout Error Rate
+      - alert: HighMcpConnectionTimeouts
+        expr: |
+          (
+            sum(rate(mcp_transport_connection_failures_total{error_type="timeout"}[5m])) by (transport)
+            /
+            sum(rate(mcp_transport_connection_failures_total[5m])) by (transport)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_transport
+        annotations:
+          summary: "High timeout rate for {{ $labels.transport }} connections"
+          description: "More than 50% of {{ $labels.transport }} connection failures are timeouts"
+
+      # No Active Connections
+      - alert: NoMcpActiveConnections
+        expr: sum(mcp_transport_connections_active) == 0
+        for: 15m
+        labels:
+          severity: info
+          category: mcp_transport
+        annotations:
+          summary: "No active MCP connections"
+          description: "No active MCP transport connections detected for 15 minutes"
+
+  - name: mcp_errors
+    interval: 30s
+    rules:
+      # High MCP Error Rate
+      - alert: HighMcpErrorRate
+        expr: |
+          sum(rate(mcp_errors_total{severity!="warning"}[5m])) by (category) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_errors
+        annotations:
+          summary: "High MCP error rate in {{ $labels.category }}"
+          description: "{{ $labels.category }} error rate is above 0.5 errors/second (current: {{ $value }})"
+
+      # Critical MCP Errors
+      - alert: CriticalMcpErrors
+        expr: |
+          sum(rate(mcp_errors_total{severity="critical"}[5m])) by (category) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_errors
+        annotations:
+          summary: "Critical MCP errors in {{ $labels.category }}"
+          description: "{{ $labels.category }} critical error rate is above 0.1 errors/second (current: {{ $value }})"
+
+      # High JSON-RPC Error Rate
+      - alert: HighMcpJsonRpcErrorRate
+        expr: |
+          sum(rate(mcp_jsonrpc_errors_total[5m])) by (error_type, operation) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_errors
+        annotations:
+          summary: "High JSON-RPC error rate for {{ $labels.operation }}"
+          description: "{{ $labels.operation }} JSON-RPC {{ $labels.error_type }} error rate is above 0.5 errors/second (current: {{ $value }})"
+
+      # High Method Not Found Errors
+      - alert: HighMcpMethodNotFoundErrors
+        expr: |
+          (
+            sum(rate(mcp_jsonrpc_errors_total{error_type="method_not_found"}[5m]))
+            /
+            sum(rate(mcp_jsonrpc_errors_total[5m]))
+          ) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_errors
+        annotations:
+          summary: "High rate of method-not-found errors"
+          description: "More than 30% of JSON-RPC errors are method-not-found (current: {{ $value | humanizePercentage }})"
+
+  - name: mcp_performance
+    interval: 30s
+    rules:
+      # High MCP Operation Latency
+      - alert: HighMcpOperationLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_operation_latency_seconds_bucket{status="success"}[5m])) by (le, operation)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_performance
+        annotations:
+          summary: "High latency for {{ $labels.operation }}"
+          description: "p95 {{ $labels.operation }} latency is above 5 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Critical MCP Operation Latency
+      - alert: CriticalMcpOperationLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_operation_latency_seconds_bucket{status="success"}[5m])) by (le, operation)
+          ) > 15
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_performance
+        annotations:
+          summary: "Critical latency for {{ $labels.operation }}"
+          description: "p95 {{ $labels.operation }} latency is above 15 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Slow Tool Invocations
+      - alert: SlowMcpToolInvocations
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_tool_invocation_duration_seconds_bucket{status="success"}[5m])) by (le, tool_name)
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_performance
+        annotations:
+          summary: "Slow tool invocations for {{ $labels.tool_name }}"
+          description: "p95 {{ $labels.tool_name }} invocation time is above 30 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Very Slow Tool Invocations
+      - alert: VerySlowMcpToolInvocations
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_tool_invocation_duration_seconds_bucket{status="success"}[5m])) by (le, tool_name)
+          ) > 60
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_performance
+        annotations:
+          summary: "Very slow tool invocations for {{ $labels.tool_name }}"
+          description: "p95 {{ $labels.tool_name }} invocation time is above 60 seconds (current: {{ $value | humanizeDuration }})"
+
+  - name: mcp_server_operations
+    interval: 30s
+    rules:
+      # High Server Operation Failure Rate
+      - alert: HighMcpServerOperationFailureRate
+        expr: |
+          (
+            sum(rate(mcp_server_operations_total{status="error"}[5m])) by (operation)
+            /
+            sum(rate(mcp_server_operations_total[5m])) by (operation)
+          ) > 0.15
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_operations
+        annotations:
+          summary: "High failure rate for {{ $labels.operation }}"
+          description: "{{ $labels.operation }} failure rate is above 15% (current: {{ $value | humanizePercentage }})"
+
+      # Critical Server Operation Failure Rate
+      - alert: CriticalMcpServerOperationFailureRate
+        expr: |
+          (
+            sum(rate(mcp_server_operations_total{status="error"}[5m])) by (operation)
+            /
+            sum(rate(mcp_server_operations_total[5m])) by (operation)
+          ) > 0.4
+        for: 2m
+        labels:
+          severity: critical
+          category: mcp_operations
+        annotations:
+          summary: "Critical failure rate for {{ $labels.operation }}"
+          description: "{{ $labels.operation }} failure rate is above 40% (current: {{ $value | humanizePercentage }})"
+
+      # High Server Delete Rate
+      - alert: HighMcpServerDeleteRate
+        expr: |
+          sum(rate(mcp_server_operations_total{operation="delete"}[10m])) > 10
+        for: 10m
+        labels:
+          severity: info
+          category: mcp_operations
+        annotations:
+          summary: "High MCP server delete rate"
+          description: "Servers are being deleted at a high rate (current: {{ $value }}/second)"
+
+  - name: mcp_registry
+    interval: 30s
+    rules:
+      # High Registry Import Failure Rate
+      - alert: HighMcpRegistryImportFailureRate
+        expr: |
+          (
+            sum(rate(mcp_registry_imports_total{status="error"}[5m])) by (source)
+            /
+            sum(rate(mcp_registry_imports_total[5m])) by (source)
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_registry
+        annotations:
+          summary: "High registry import failure rate from {{ $labels.source }}"
+          description: "Registry import failure rate from {{ $labels.source }} is above 20% (current: {{ $value | humanizePercentage }})"
+
+      # Slow Registry Imports
+      - alert: SlowMcpRegistryImports
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(mcp_registry_import_duration_seconds_bucket[5m])) by (le, source)
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: mcp_registry
+        annotations:
+          summary: "Slow registry imports from {{ $labels.source }}"
+          description: "p95 registry import duration from {{ $labels.source }} is above 10 seconds (current: {{ $value | humanizeDuration }})"

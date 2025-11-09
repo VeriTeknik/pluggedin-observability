@@ -34,33 +34,171 @@ cp ../pluggedin-observability/instrumentation/nodejs-metrics.ts lib/metrics.ts
 cp ../pluggedin-observability/instrumentation/nodejs-logging.ts lib/logging.ts
 ```
 
-#### 1.3. Create Metrics Endpoint
+#### 1.3. Create Metrics Endpoint with IP Whitelisting
 
 **File**: `app/api/metrics/route.ts`
 
-```typescript
-import { register } from '@/lib/metrics';
-import { NextResponse } from 'next/server';
+⚠️ **SECURITY CRITICAL**: The metrics endpoint exposes sensitive operational data including:
+- Request rates and patterns
+- Error rates and types
+- System performance metrics
+- Business metrics (user sessions, OAuth flows, etc.)
+- Database query patterns
 
-export async function GET() {
+**NEVER** leave this endpoint publicly accessible. Always implement IP whitelisting.
+
+```typescript
+import { NextRequest, NextResponse } from 'next/server';
+import { getMetrics } from '@/lib/metrics';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+/**
+ * Check if an IP address is allowed to access metrics
+ * Supports both exact IP matches and CIDR notation
+ */
+function isIpAllowed(clientIp: string | null): boolean {
+  if (!clientIp) {
+    console.warn('[Metrics] No client IP detected, denying access');
+    return false;
+  }
+
+  // Get allowed IPs from environment variable
+  // Default: localhost + common Docker networks
+  const allowedIpsEnv = process.env.METRICS_ALLOWED_IPS || '127.0.0.1,::1,172.17.0.0/16,172.18.0.0/16,10.0.0.0/8';
+  const allowedIps = allowedIpsEnv.split(',').map(ip => ip.trim());
+
+  // Check exact IP match first
+  if (allowedIps.includes(clientIp)) {
+    return true;
+  }
+
+  // Check CIDR ranges
+  for (const allowedIp of allowedIps) {
+    if (allowedIp.includes('/')) {
+      if (isIpInCidr(clientIp, allowedIp)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if an IP is within a CIDR range
+ * Supports IPv4 only for simplicity
+ */
+function isIpInCidr(ip: string, cidr: string): boolean {
   try {
-    const metrics = await register.metrics();
+    const [range, bits] = cidr.split('/');
+    const mask = ~(2 ** (32 - parseInt(bits)) - 1);
+
+    const ipNum = ipToNumber(ip);
+    const rangeNum = ipToNumber(range);
+
+    return (ipNum & mask) === (rangeNum & mask);
+  } catch (error) {
+    console.error('[Metrics] Invalid CIDR range:', cidr, error);
+    return false;
+  }
+}
+
+/**
+ * Convert IPv4 address to number
+ */
+function ipToNumber(ip: string): number {
+  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet), 0) >>> 0;
+}
+
+/**
+ * Extract client IP from request headers
+ * Checks X-Forwarded-For, X-Real-IP, and connection
+ */
+function getClientIp(request: NextRequest): string | null {
+  // Check X-Forwarded-For (proxy/load balancer)
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    // Take the first IP (original client)
+    return forwardedFor.split(',')[0].trim();
+  }
+
+  // Check X-Real-IP (nginx)
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) {
+    return realIp.trim();
+  }
+
+  // Fallback to direct connection IP (not available in Next.js edge runtime)
+  return null;
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    // Security: IP whitelisting
+    const clientIp = getClientIp(request);
+
+    if (!isIpAllowed(clientIp)) {
+      console.warn('[Metrics] Unauthorized access attempt from IP:', clientIp);
+      return NextResponse.json(
+        { error: 'Forbidden - IP not whitelisted' },
+        { status: 403 }
+      );
+    }
+
+    const metrics = await getMetrics();
+
     return new NextResponse(metrics, {
       headers: {
-        'Content-Type': register.contentType,
+        'Content-Type': 'text/plain; version=0.0.4; charset=utf-8',
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
       },
     });
   } catch (error) {
+    console.error('[Metrics] Error generating metrics:', error);
     return NextResponse.json(
-      { error: 'Failed to collect metrics' },
+      { error: 'Failed to generate metrics' },
       { status: 500 }
     );
   }
 }
-
-// Allow public access for Prometheus scraping
-export const dynamic = 'force-dynamic';
 ```
+
+#### 1.3.1. Configure IP Whitelisting
+
+Add to `.env`:
+
+```bash
+# Metrics Endpoint Security
+# Comma-separated list of allowed IPs and CIDR ranges for Prometheus scraping
+# Default: localhost and common Docker networks (Docker uses 172.17.0.0/16, 172.18.0.0/16, 10.0.0.0/8)
+# Only these IPs can access /api/metrics endpoint - CRITICAL for privacy and security
+# Example: METRICS_ALLOWED_IPS="127.0.0.1,::1,172.18.0.0/24,10.0.0.0/8,185.96.168.246"
+METRICS_ALLOWED_IPS="127.0.0.1,::1,172.17.0.0/16,172.18.0.0/16,10.0.0.0/8"
+```
+
+**Configuration Examples**:
+
+1. **Local development** (default):
+   ```bash
+   METRICS_ALLOWED_IPS="127.0.0.1,::1"
+   ```
+
+2. **Docker Compose** (Prometheus in same Docker network):
+   ```bash
+   METRICS_ALLOWED_IPS="127.0.0.1,::1,172.17.0.0/16,172.18.0.0/16"
+   ```
+
+3. **Production** (Prometheus on specific server):
+   ```bash
+   METRICS_ALLOWED_IPS="127.0.0.1,::1,185.96.168.246"
+   ```
+
+4. **Production with Docker** (Prometheus server + Docker networks):
+   ```bash
+   METRICS_ALLOWED_IPS="127.0.0.1,::1,172.17.0.0/16,185.96.168.246"
+   ```
 
 #### 1.4. Add Middleware for HTTP Metrics
 
@@ -200,23 +338,51 @@ Add to `prometheus/prometheus.yml` in observability repo:
 # Start dev server
 pnpm dev
 
-# Check metrics endpoint
+# Test 1: Security - Verify IP whitelisting works
+# From localhost (should succeed - 200 OK)
 curl http://localhost:12005/api/metrics
+
+# Test 2: From unauthorized IP (should fail - 403 Forbidden)
+# Use a proxy or different machine to test
+curl http://your-domain.com/api/metrics
+# Expected: {"error":"Forbidden - IP not whitelisted"}
+
+# Test 3: Verify Prometheus format output
+curl http://localhost:12005/api/metrics | head -20
 
 # You should see Prometheus format output:
 # http_requests_total{method="GET",route="/",status_code="200",service="pluggedin-app"} 1
+# mcp_sessions_active{transport="sse",server_type="stdio"} 5
+# ...
+
+# Test 4: Check security logs
+# Check application logs for security events
+# Should see: "[Metrics] Unauthorized access attempt from IP: x.x.x.x" for blocked requests
+
+# Test 5: Verify from Docker network (if using Docker)
+docker exec prometheus wget -O- http://pluggedin-app:12005/api/metrics
+# Should succeed if Docker network CIDR is in METRICS_ALLOWED_IPS
 ```
+
+**Security Testing Checklist**:
+- ✅ Localhost access works (127.0.0.1, ::1)
+- ✅ Docker network access works (if applicable)
+- ✅ External unauthorized access is blocked (403)
+- ✅ Prometheus server can scrape successfully
+- ✅ Security violations are logged
 
 ### Checklist
 
 - [ ] Install dependencies (`prom-client`, `pino`, `pino-pretty`)
 - [ ] Copy metrics and logging files
-- [ ] Create `/api/metrics` endpoint
+- [ ] Create `/api/metrics` endpoint **with IP whitelisting** (CRITICAL)
+- [ ] Configure `METRICS_ALLOWED_IPS` in `.env` file (REQUIRED)
 - [ ] Add middleware for HTTP metrics
 - [ ] Add business metrics to server actions
 - [ ] Add structured logging to API routes
 - [ ] Update Prometheus config
-- [ ] Test metrics endpoint
+- [ ] **Test metrics endpoint security** (verify 403 for unauthorized IPs)
+- [ ] Test metrics endpoint (verify 200 for allowed IPs)
 - [ ] Verify logs are JSON format
 - [ ] Deploy to production
 
@@ -873,6 +1039,36 @@ Recommended order for implementation:
 
 ## Common Issues & Solutions
 
+### Issue: Metrics endpoint returns 403 Forbidden
+
+**Cause**: IP whitelisting is blocking the request
+
+**Solution 1**: Add the Prometheus server IP to `METRICS_ALLOWED_IPS`
+```bash
+# Check what IP Prometheus is using
+docker-compose exec prometheus ip addr
+
+# Add to .env
+METRICS_ALLOWED_IPS="127.0.0.1,::1,172.17.0.0/16,YOUR_PROMETHEUS_IP"
+```
+
+**Solution 2**: For Docker deployments, allow the Docker network CIDR
+```bash
+# Find Docker network subnet
+docker network inspect pluggedin-observability_monitoring | grep Subnet
+
+# Add the subnet to METRICS_ALLOWED_IPS
+METRICS_ALLOWED_IPS="127.0.0.1,::1,172.17.0.0/16,172.18.0.0/16"
+```
+
+**Solution 3**: Check if IP is being detected correctly
+```typescript
+// Add temporary logging in app/api/metrics/route.ts
+console.log('[Metrics] Client IP detected:', clientIp);
+console.log('[Metrics] X-Forwarded-For:', request.headers.get('x-forwarded-for'));
+console.log('[Metrics] X-Real-IP:', request.headers.get('x-real-ip'));
+```
+
 ### Issue: Metrics endpoint returns 404
 
 **Solution**: Verify the endpoint path matches Prometheus config
@@ -917,11 +1113,84 @@ metric.inc({ user_type: user.type });
 
 ---
 
+## Security Best Practices
+
+### 🔒 Metrics Endpoint Security
+
+⚠️ **CRITICAL**: Metrics endpoints expose sensitive operational data. **ALWAYS** implement IP whitelisting for ALL services.
+
+#### What Data Is Exposed?
+
+Metrics endpoints reveal:
+- **Performance Data**: Request rates, latencies, error rates
+- **System Resources**: Memory usage, CPU usage, disk I/O
+- **Business Metrics**: User sessions, OAuth flows, API usage patterns
+- **Database Patterns**: Query counts, connection pool usage
+- **Infrastructure Details**: Service versions, deployment topology
+
+#### Why This Is a Privacy Issue
+
+Without IP whitelisting:
+- ❌ Competitors can analyze your traffic patterns
+- ❌ Attackers can identify performance bottlenecks for DoS attacks
+- ❌ Users' behavioral patterns become visible through aggregated metrics
+- ❌ Business metrics (growth rates, feature usage) are exposed
+- ❌ System weaknesses are revealed for targeted attacks
+
+#### Implementation Requirements
+
+**All services MUST**:
+1. ✅ Implement IP whitelisting on `/metrics` endpoint
+2. ✅ Support CIDR notation for Docker networks
+3. ✅ Extract client IP from proxy headers (X-Forwarded-For, X-Real-IP)
+4. ✅ Return 403 Forbidden for unauthorized access
+5. ✅ Log unauthorized access attempts for security monitoring
+6. ✅ Use environment variables for IP configuration (never hardcode)
+
+**Default Allowed IPs** (minimum):
+```bash
+METRICS_ALLOWED_IPS="127.0.0.1,::1,172.17.0.0/16,172.18.0.0/16,10.0.0.0/8"
+```
+
+**Production Configuration**:
+```bash
+# Only allow Prometheus server IP + localhost
+METRICS_ALLOWED_IPS="127.0.0.1,::1,YOUR_PROMETHEUS_SERVER_IP"
+```
+
+#### Per-Service Implementation
+
+- **Next.js** (pluggedin-app): See section 1.3 for full implementation
+- **Node.js/Express**: Add IP whitelisting middleware before metrics endpoint
+- **Python/FastAPI**: Use dependency injection for IP validation
+- **Docker**: Ensure Docker network CIDRs are in whitelist
+
+#### Testing Security
+
+Before deploying to production:
+
+```bash
+# 1. Test from localhost (should succeed)
+curl http://localhost:PORT/metrics
+
+# 2. Test from external IP (should fail with 403)
+curl http://your-domain.com/metrics
+
+# 3. Verify Prometheus can scrape (should succeed)
+curl http://prometheus-server-ip:9090/targets
+
+# 4. Check security logs for violations
+grep "Unauthorized access attempt" logs/*.log
+```
+
+---
+
 ## Support
 
 - **Documentation**: See main [README.md](./README.md)
 - **Instrumentation**: See [instrumentation/README.md](./instrumentation/README.md)
 - **Database Monitoring**: See [observability_readme.md](./observability_readme.md)
+- **Security**: See **Security Best Practices** section above
 - **Issues**: Open issue in pluggedin-observability repo
 
 ---
