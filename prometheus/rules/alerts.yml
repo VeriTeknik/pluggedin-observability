@@ -535,3 +535,63 @@ groups:
         annotations:
           summary: "High upstream error rate on Registry Proxy"
           description: "Registry Proxy upstream error rate is above 10% (current: {{ $value | humanizePercentage }})"
+
+      # Enhanced Endpoint 500 Errors
+      - alert: EnhancedEndpoint500Errors
+        expr: |
+          sum(rate(registry_proxy_http_requests_total{service="registry-proxy",endpoint="/v0/enhanced/servers",status="500"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: errors
+        annotations:
+          summary: "500 errors on Enhanced Servers endpoint"
+          description: "The /v0/enhanced/servers endpoint is returning 500 errors ({{ $value | humanize }} errors/sec). Check database query errors in logs."
+
+      # High Error Count from Logs
+      - alert: HighErrorLogCount
+        expr: |
+          sum(count_over_time({service="registry-proxy", level="error"}[5m])) > 10
+        for: 3m
+        labels:
+          severity: warning
+          category: errors
+        annotations:
+          summary: "High error log count on Registry Proxy"
+          description: "Registry Proxy has logged {{ $value }} errors in the last 5 minutes. Check Loki logs for details."
+
+      # Database Query Errors
+      - alert: DatabaseQueryErrors
+        expr: |
+          sum(count_over_time({service="registry-proxy", level="error"} |= "Failed to query enhanced servers"[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "Database query failures on Registry Proxy"
+          description: "Registry Proxy has {{ $value }} database query failures in the last 5 minutes. Check database connectivity and query syntax."
+
+      # Array Parameter Errors (our specific fix)
+      - alert: ArrayParameterErrors
+        expr: |
+          sum(count_over_time({service="registry-proxy", level="error"} |= "pq: op ANY/ALL (array) requires array on right side"[5m])) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: database
+        annotations:
+          summary: "PostgreSQL array parameter errors detected"
+          description: "Registry Proxy is experiencing PostgreSQL array parameter errors. This indicates the query builder fix may not have been applied correctly."
+
+      # Filter Parameter Errors
+      - alert: FilterParameterErrors
+        expr: |
+          sum(count_over_time({service="registry-proxy", level="error", endpoint="/v0/enhanced/servers"} |~ "registry_types|transports|tags"[5m])) > 5
+        for: 2m
+        labels:
+          severity: warning
+          category: errors
+        annotations:
+          summary: "Filter parameter errors on Enhanced endpoint"
+          description: "The /v0/enhanced/servers endpoint is experiencing {{ $value }} filter-related errors. Check registry_types, transports, and tags parameters."
