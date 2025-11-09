@@ -73,6 +73,7 @@ scrape_configs:
       - targets: ['registry.plugged.in']
         labels:
           service: 'registry-proxy'
+          component: 'api'
           environment: 'production'
     scrape_interval: 30s
     scrape_timeout: 10s
