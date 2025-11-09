@@ -46,16 +46,28 @@ scrape_configs:
           expressions:
             level: level
             msg: msg
-            timestamp: timestamp
+            trace_id: trace_id
+            event: event
+            userId: userId
+            serverUuid: serverUuid
+            duration_ms: duration_ms
+            service_name: service_name
+            version: version
+            severity: severity
+            timestamp: time
 
-      # Extract log level
+      # Extract log level and other labels
       - labels:
           level:
+          trace_id:
+          event:
+          service_name:
+          severity:
 
       # Parse timestamp if exists
       - timestamp:
           source: timestamp
-          format: RFC3339
+          format: UnixMs
 
       # Drop debug logs (optional)
       # - match:
@@ -96,16 +108,27 @@ scrape_configs:
       - json:
           expressions:
             level: level
-            message: message
+            msg: msg
             trace_id: trace_id
+            event: event
+            userId: userId
+            serverUuid: serverUuid
+            duration_ms: duration_ms
+            service_name: service_name
+            version: version
+            severity: severity
+            timestamp: time
 
       - labels:
           level:
           trace_id:
+          event:
+          service_name:
+          severity:
 
       - timestamp:
           source: timestamp
-          format: RFC3339
+          format: UnixMs
 
   # Nginx/Traefik access logs (optional)
   - job_name: traefik
