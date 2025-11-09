@@ -272,3 +272,135 @@ groups:
         annotations:
           summary: "High Milvus memory usage"
           description: "Milvus is using more than 8GB memory (current: {{ $value | humanize }}GB)"
+
+  - name: rag_api
+    interval: 30s
+    rules:
+      # RAG API Server Down
+      - alert: RagApiServerDown
+        expr: up{job="api-server"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "RAG API Server is down"
+          description: "api.plugged.in has been down for more than 2 minutes."
+
+      # High RAG Query Error Rate
+      - alert: HighRagQueryErrorRate
+        expr: |
+          (
+            sum(rate(rag_queries_total{status="error"}[5m]))
+            /
+            sum(rate(rag_queries_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: rag
+        annotations:
+          summary: "High RAG query error rate"
+          description: "RAG query error rate is above 10% (current: {{ $value | humanizePercentage }})"
+
+      # Critical RAG Query Error Rate
+      - alert: CriticalRagQueryErrorRate
+        expr: |
+          (
+            sum(rate(rag_queries_total{status="error"}[5m]))
+            /
+            sum(rate(rag_queries_total[5m]))
+          ) > 0.25
+        for: 2m
+        labels:
+          severity: critical
+          category: rag
+        annotations:
+          summary: "Critical RAG query error rate"
+          description: "RAG query error rate is above 25% (current: {{ $value | humanizePercentage }})"
+
+      # Slow RAG Queries
+      - alert: SlowRagQueries
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(rag_query_duration_seconds_bucket[5m])) by (le)
+          ) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow RAG queries"
+          description: "p95 RAG query duration is above 10 seconds (current: {{ $value | humanizeDuration }})"
+
+      # High Document Processing Failures
+      - alert: HighDocumentProcessingFailures
+        expr: |
+          (
+            sum(rate(document_processing_duration_seconds_count{status="error"}[10m]))
+            /
+            sum(rate(document_processing_duration_seconds_count[10m]))
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          category: rag
+        annotations:
+          summary: "High document processing failure rate"
+          description: "Document processing error rate is above 20% (current: {{ $value | humanizePercentage }})"
+
+      # Slow Vector Search
+      - alert: SlowVectorSearch
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(vector_search_duration_seconds_bucket{collection="document_embeddings"}[5m])) by (le)
+          ) > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow vector search operations"
+          description: "p95 vector search duration is above 5 seconds (current: {{ $value | humanizeDuration }})"
+
+      # High LLM API Error Rate
+      - alert: HighLlmApiErrorRate
+        expr: |
+          (
+            sum(rate(llm_api_calls_total{status="error"}[5m])) by (provider)
+            /
+            sum(rate(llm_api_calls_total[5m])) by (provider)
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: llm
+        annotations:
+          summary: "High LLM API error rate for {{ $labels.provider }}"
+          description: "{{ $labels.provider }} API error rate is above 10% (current: {{ $value | humanizePercentage }})"
+
+      # Slow LLM API Calls
+      - alert: SlowLlmApiCalls
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(llm_api_duration_seconds_bucket[5m])) by (le, provider)
+          ) > 30
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow LLM API calls for {{ $labels.provider }}"
+          description: "p95 {{ $labels.provider }} API call duration is above 30 seconds (current: {{ $value | humanizeDuration }})"
+
+      # No RAG Queries
+      - alert: NoRagQueries
+        expr: |
+          sum(rate(rag_queries_total[5m])) == 0
+        for: 15m
+        labels:
+          severity: info
+          category: rag
+        annotations:
+          summary: "No RAG queries received"
+          description: "RAG API has not received any queries in the last 15 minutes"

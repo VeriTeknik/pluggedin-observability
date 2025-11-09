@@ -119,7 +119,7 @@ The stack monitors these services (see `prometheus/prometheus.yml` for complete 
 - **pluggedin-app**: Next.js app at `plugged.in` (metrics at `/api/metrics`)
 - **registry-proxy**: Node.js proxy at `registry.plugged.in` (metrics at `/metrics`)
 - **mcp-proxy**: MCP server at `mcp.plugged.in` (metrics at `/metrics`)
-- **v3-server**: FastAPI RAG backend (metrics at `/metrics`)
+- **api.plugged.in**: FastAPI RAG backend (metrics at `/metrics`) - ✅ fully instrumented
 - **PostgreSQL**: Via postgres-exporter (requires `POSTGRES_EXPORTER_DSN` in `.env`)
 - **System metrics**: Via node-exporter (CPU, memory, disk)
 - **Container metrics**: Via cadvisor (Docker container stats)

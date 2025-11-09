@@ -30,7 +30,7 @@ This repository provides a complete observability stack for monitoring 10 distri
 │  • pluggedin-app (Next.js)                       │
 │  • registry-proxy (Node.js)                      │
 │  • pluggedin-mcp (Node.js) - mcp.plugged.in      │
-│  • plugged_in_v3_server (FastAPI)                │
+│  • api.plugged.in (FastAPI RAG backend)          │
 │  • PostgreSQL (database)                         │
 │  • Milvus (vector database)                      │
 └──────────────────────────────────────────────────┘
@@ -88,7 +88,7 @@ This repository provides a complete observability stack for monitoring 10 distri
 
 6. **Instrument your services**:
    - See **[IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md)** for step-by-step instructions
-   - Start with high-priority services (pluggedin-app, v3-server)
+   - Start with high-priority services (pluggedin-app, api.plugged.in)
 
 ## 📦 Services
 
@@ -164,7 +164,15 @@ This repository provides a complete observability stack for monitoring 10 distri
    - Request rates
    - Error rates
 
-2. **Node.js Services** (`pluggedin-nodejs`)
+2. **RAG API Dashboard** (`rag-api-dashboard`) ⭐ **NEW**
+   - **Service Health**: API status, request rate, error rate, P95 latency
+   - **RAG Query Metrics**: Query rate by status, duration percentiles, error rates, total queries
+   - **Document Processing**: Processing duration by type, chunk counts, upload success/failure rates
+   - **Vector Search**: Search latency, results count, total searches
+   - **LLM API Metrics**: OpenAI API calls by model, latency, error rates, token usage
+   - **HTTP Traffic**: Request rate by endpoint/status, duration by endpoint, active requests
+
+3. **Node.js Services** (`pluggedin-nodejs`)
    - Memory usage
    - CPU usage
    - Event loop lag
@@ -466,7 +474,7 @@ docker system prune -a --volumes
 - ✅ **pluggedin-app** - Next.js application (plugged.in)
 - ✅ **registry-proxy** - MCP registry proxy (registry.plugged.in)
 - ⏳ **pluggedin-mcp** - MCP proxy (mcp.plugged.in) - *deployment pending*
-- ✅ **plugged_in_v3_server** - FastAPI RAG backend
+- ✅ **api.plugged.in** - FastAPI RAG backend - *fully instrumented*
 - ✅ **PostgreSQL** - Main database (via postgres-exporter)
 - 📋 **Milvus** - Vector database (see [observability_readme.md](./observability_readme.md))
 

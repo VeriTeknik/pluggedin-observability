@@ -470,7 +470,8 @@ function handleRequest(serverName: string, method: string, status: string) {
 
 **Repository**: `plugged_in_v3_server`
 **Tech Stack**: Python 3.11+, FastAPI
-**Current Status**: ⏳ Needs instrumentation
+**URL**: https://api.plugged.in
+**Current Status**: ✅ Instrumented
 
 ### Steps
 
@@ -626,13 +627,14 @@ async def query_rag(question: str):
 #### 4.5. Update Prometheus Configuration
 
 ```yaml
-  - job_name: 'v3-server'
+  - job_name: 'api-server'
     metrics_path: '/metrics'
-    scheme: 'http'
+    scheme: 'https'
     static_configs:
-      - targets: ['v3-server:8000']  # or your actual host
+      - targets: ['api.plugged.in']
         labels:
-          service: 'rag-backend'
+          service: 'api.plugged.in'
+          component: 'rag-backend'
           environment: 'production'
     scrape_interval: 30s
 ```
@@ -656,18 +658,18 @@ curl http://localhost:8000/metrics | grep rag_queries_total
 
 ### Checklist
 
-- [ ] Install dependencies (`prometheus-client`, `python-json-logger`)
-- [ ] Update `requirements.txt`
-- [ ] Copy instrumentation files
-- [ ] Add middleware to FastAPI app
-- [ ] Create `/metrics` endpoint
-- [ ] Create `/health` endpoint
-- [ ] Add RAG-specific metrics (document processing, vector search, queries)
-- [ ] Add LLM API call tracking
-- [ ] Add structured logging to endpoints
-- [ ] Update Prometheus config
-- [ ] Test locally
-- [ ] Deploy to production
+- [x] Install dependencies (`prometheus-client`, `python-json-logger`)
+- [x] Update `requirements.txt`
+- [x] Copy instrumentation files
+- [x] Add middleware to FastAPI app
+- [x] Create `/metrics` endpoint
+- [x] Create `/health` endpoint
+- [x] Add RAG-specific metrics (document processing, vector search, queries)
+- [x] Add LLM API call tracking
+- [x] Add structured logging to endpoints
+- [x] Update Prometheus config
+- [x] Test locally
+- [x] Deploy to production
 
 ---
 
@@ -819,7 +821,7 @@ For each service:
 
 1. **All Services Up**
    ```promql
-   up{job=~"pluggedin-app|registry-proxy|v3-server|postgres"}
+   up{job=~"pluggedin-app|registry-proxy|api-server|postgres"}
    ```
    All should return 1
 
@@ -853,7 +855,7 @@ Recommended order for implementation:
 
 3. **Week 3**: Add remaining services
    - [ ] registry-proxy
-   - [ ] plugged_in_v3_server
+   - [x] plugged_in_v3_server (api.plugged.in) - COMPLETED
    - [ ] Configure Milvus monitoring
 
 4. **Week 4**: MCP proxy
@@ -930,7 +932,7 @@ metric.inc({ user_type: user.type });
 |---------|----------|--------|-----|
 | pluggedin-app | High | ⏳ Pending | Week 2 |
 | registry-proxy | High | ⏳ Pending | Week 3 |
-| plugged_in_v3_server | High | ⏳ Pending | Week 3 |
+| plugged_in_v3_server (api.plugged.in) | High | ✅ Complete | Done |
 | pluggedin-mcp | Medium | ⏳ Pending | Week 4 |
 | PostgreSQL | High | ✅ Ready | Week 1 |
 | Milvus | Medium | 📋 Manual | Week 3 |

@@ -177,11 +177,11 @@
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "count(up{job=\"v3-server\"} == 1)",
+          "expr": "count(up{job=\"api-server\"} == 1)",
           "refId": "A"
         }
       ],
-      "title": "RAG v3 Server Status",
+      "title": "API Server Status (api.plugged.in)",
       "type": "stat"
     },
     {

@@ -90,14 +90,15 @@ scrape_configs:
     scrape_interval: 30s
     scrape_timeout: 10s
 
-  # RAG v3 Server (FastAPI)
-  - job_name: 'v3-server'
+  # RAG v3 Server (FastAPI) - api.plugged.in
+  - job_name: 'api-server'
     metrics_path: '/metrics'
-    scheme: 'http'
+    scheme: 'https'
     static_configs:
-      - targets: ['v3-server:8000']
+      - targets: ['api.plugged.in']
         labels:
-          service: 'rag-backend'
+          service: 'api.plugged.in'
+          component: 'rag-backend'
           environment: 'production'
     scrape_interval: 30s
     scrape_timeout: 10s
