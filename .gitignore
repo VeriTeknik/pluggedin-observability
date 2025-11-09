@@ -30,3 +30,4 @@ secrets/
 # Backup files
 *.backup
 *.bak
+milvus.md

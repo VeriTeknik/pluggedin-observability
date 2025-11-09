@@ -220,3 +220,55 @@ groups:
         annotations:
           summary: "Container {{ $labels.name }} is restarting"
           description: "Container {{ $labels.name }} has restarted {{ $value }} times in the last 5 minutes"
+
+  - name: milvus
+    interval: 30s
+    rules:
+      # Milvus Down
+      - alert: MilvusDown
+        expr: up{job="milvus"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Milvus is down"
+          description: "Milvus instance {{ $labels.instance }} has been down for more than 2 minutes."
+
+      # High Search Latency
+      - alert: MilvusHighSearchLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(milvus_search_latency_seconds_bucket[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High Milvus search latency"
+          description: "Milvus p95 search latency is above 2 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Low Cache Hit Ratio
+      - alert: MilvusLowCacheHitRatio
+        expr: milvus_cache_hit_ratio < 0.8
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Low Milvus cache hit ratio"
+          description: "Milvus cache hit ratio is below 80% (current: {{ $value | humanizePercentage }})"
+
+      # High Memory Usage
+      - alert: MilvusHighMemory
+        expr: |
+          process_resident_memory_bytes{job="milvus"} /
+          (1024 * 1024 * 1024) > 8
+        for: 5m
+        labels:
+          severity: warning
+          category: resources
+        annotations:
+          summary: "High Milvus memory usage"
+          description: "Milvus is using more than 8GB memory (current: {{ $value | humanize }}GB)"

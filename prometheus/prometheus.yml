@@ -116,6 +116,17 @@ scrape_configs:
         labels:
           service: 'loki'
 
+# Milvus Vector Database
+  - job_name: 'milvus'
+    static_configs:
+      - targets: ['185.96.168.247:9091']
+        labels:
+          service: 'milvus'
+          instance: 'standalone'
+          environment: 'production'
+    scrape_interval: 30s
+    scrape_timeout: 10s
+
 # Remote storage configuration (optional - for long-term storage)
 # remote_write:
 #   - url: "https://prometheus-remote-write-endpoint"
