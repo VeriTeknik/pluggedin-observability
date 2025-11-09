@@ -120,7 +120,7 @@ scrape_configs:
 # Milvus Vector Database
   - job_name: 'milvus'
     static_configs:
-      - targets: ['185.96.168.247:9091']
+      - targets: ['milvus.plugged.in:9091']
         labels:
           service: 'milvus'
           instance: 'standalone'

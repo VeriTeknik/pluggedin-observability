@@ -73,6 +73,40 @@ This dashboard integrates with the alert rules defined in `prometheus/rules/aler
 
 ---
 
+### 3. Milvus Vector Database (`milvus.json`) ⭐
+
+**Purpose**: Comprehensive monitoring for Milvus vector database at milvus.plugged.in
+
+**Dashboard Sections**:
+
+#### 🎯 Service Health & Performance
+- **Milvus Status**: Up/Down indicator with color coding (red=down, green=up)
+- **Request Rate (QPS)**: Search, Insert, and Query operations per second
+- **Search Latency**: P50, P95, P99 percentiles for search operations
+- **Cache Hit Ratio**: Gauge showing cache efficiency (target: >80%)
+- **Memory Usage**: Current memory consumption (warning at 6GB, critical at 8GB)
+- **Collections Count**: Total number of collections in Milvus
+
+#### 📊 Collection Metrics
+- **Collection Row Counts**: Number of vectors per collection over time
+- **Storage Size by Collection**: Disk usage per collection
+- **Goroutines**: Active goroutines (Go runtime metric)
+- **CPU Usage**: Processor utilization percentage
+
+**Key Metrics to Watch**:
+- Search p95 latency should be < 2s (yellow at 1s, red at 2s)
+- Cache hit ratio should be > 80%
+- Memory usage should stay under 8GB
+- CPU usage typically under 80%
+
+**Alert Integration**:
+- MilvusDown: Service unreachable for 2+ minutes
+- MilvusHighSearchLatency: p95 search > 2s
+- MilvusLowCacheHitRatio: Cache hit ratio < 80%
+- MilvusHighMemory: Memory usage > 8GB
+
+---
+
 ## Dashboard Configuration
 
 ### Auto-Refresh
