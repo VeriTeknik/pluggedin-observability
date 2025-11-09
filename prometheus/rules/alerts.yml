@@ -404,3 +404,134 @@ groups:
         annotations:
           summary: "No RAG queries received"
           description: "RAG API has not received any queries in the last 15 minutes"
+
+  - name: registry_proxy
+    interval: 30s
+    rules:
+      # Registry Proxy Down
+      - alert: RegistryProxyDown
+        expr: up{job="registry-proxy"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Registry Proxy is down"
+          description: "registry.plugged.in has been down for more than 2 minutes."
+
+      # High Registry Proxy Error Rate
+      - alert: RegistryProxyHighErrorRate
+        expr: |
+          (
+            sum(rate(registry_proxy_http_requests_total{service="registry-proxy",status=~"5.."}[5m]))
+            /
+            sum(rate(registry_proxy_http_requests_total{service="registry-proxy"}[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          category: errors
+        annotations:
+          summary: "High error rate on Registry Proxy"
+          description: "Registry Proxy error rate is above 5% (current: {{ $value | humanizePercentage }})"
+
+      # Critical Registry Proxy Error Rate
+      - alert: RegistryProxyCriticalErrorRate
+        expr: |
+          (
+            sum(rate(registry_proxy_http_requests_total{service="registry-proxy",status=~"5.."}[5m]))
+            /
+            sum(rate(registry_proxy_http_requests_total{service="registry-proxy"}[5m]))
+          ) > 0.15
+        for: 2m
+        labels:
+          severity: critical
+          category: errors
+        annotations:
+          summary: "Critical error rate on Registry Proxy"
+          description: "Registry Proxy error rate is above 15% (current: {{ $value | humanizePercentage }})"
+
+      # High Registry Proxy Latency
+      - alert: RegistryProxyHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(registry_proxy_http_request_duration_seconds_bucket{service="registry-proxy"}[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "High latency on Registry Proxy"
+          description: "Registry Proxy p95 latency is above 2 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Critical Registry Proxy Latency
+      - alert: RegistryProxyCriticalLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(registry_proxy_http_request_duration_seconds_bucket{service="registry-proxy"}[5m])) by (le)
+          ) > 5
+        for: 2m
+        labels:
+          severity: critical
+          category: performance
+        annotations:
+          summary: "Critical latency on Registry Proxy"
+          description: "Registry Proxy p95 latency is above 5 seconds (current: {{ $value | humanizeDuration }})"
+
+      # Low Cache Hit Rate
+      - alert: RegistryProxyLowCacheHitRate
+        expr: |
+          (
+            sum(rate(registry_proxy_cache_hits_total{service="registry-proxy"}[5m]))
+            /
+            (sum(rate(registry_proxy_cache_hits_total{service="registry-proxy"}[5m])) + sum(rate(registry_proxy_cache_misses_total{service="registry-proxy"}[5m])))
+          ) < 0.7
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Low cache hit rate on Registry Proxy"
+          description: "Registry Proxy cache hit rate is below 70% (current: {{ $value | humanizePercentage }})"
+
+      # High Database Connections
+      - alert: RegistryProxyHighDatabaseConnections
+        expr: registry_proxy_database_connections_active{service="registry-proxy"} > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: database
+        annotations:
+          summary: "High database connections from Registry Proxy"
+          description: "Registry Proxy has {{ $value }} active database connections (threshold: 80)"
+
+      # Slow Database Queries
+      - alert: RegistryProxySlowDatabaseQueries
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(registry_proxy_database_query_duration_seconds_bucket{service="registry-proxy"}[5m])) by (le, operation)
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Slow database queries on Registry Proxy"
+          description: "Registry Proxy p95 database query duration is above 1 second for {{ $labels.operation }} (current: {{ $value | humanizeDuration }})"
+
+      # High Upstream Error Rate
+      - alert: RegistryProxyHighUpstreamErrorRate
+        expr: |
+          (
+            sum(rate(registry_proxy_upstream_requests_total{service="registry-proxy",status=~"5.."}[5m]))
+            /
+            sum(rate(registry_proxy_upstream_requests_total{service="registry-proxy"}[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          category: upstream
+        annotations:
+          summary: "High upstream error rate on Registry Proxy"
+          description: "Registry Proxy upstream error rate is above 10% (current: {{ $value | humanizePercentage }})"
