@@ -65,12 +65,13 @@ scrape_configs:
     scrape_interval: 30s
     scrape_timeout: 10s
 
-  # Registry Proxy (Node.js)
+  # Registry Proxy (Go) - Direct port access (not via HTTPS)
+  # Metrics endpoint is blocked from public HTTPS for security
   - job_name: 'registry-proxy'
     metrics_path: '/metrics'
-    scheme: 'https'
+    scheme: 'http'
     static_configs:
-      - targets: ['registry.plugged.in']
+      - targets: ['185.96.168.251:8090']
         labels:
           service: 'registry-proxy'
           component: 'api'
