@@ -546,52 +546,52 @@ groups:
           category: errors
         annotations:
           summary: "500 errors on Enhanced Servers endpoint"
-          description: "The /v0/enhanced/servers endpoint is returning 500 errors ({{ $value | humanize }} errors/sec). Check database query errors in logs."
+          description: "The /v0/enhanced/servers endpoint is returning 500 errors ({{ $value | humanize }} errors/sec). Check database query errors."
 
-      # High Error Count from Logs
+      # High Error Log Count (using Prometheus metrics)
       - alert: HighErrorLogCount
         expr: |
-          sum(count_over_time({service="registry-proxy", level="error"}[5m])) > 10
+          rate(registry_proxy_error_logs_total{level="error"}[5m]) > 2
         for: 3m
         labels:
           severity: warning
           category: errors
         annotations:
-          summary: "High error log count on Registry Proxy"
-          description: "Registry Proxy has logged {{ $value }} errors in the last 5 minutes. Check Loki logs for details."
+          summary: "High error log rate on Registry Proxy"
+          description: "Registry Proxy is logging {{ $value | humanize }} errors/second. Check Grafana dashboard for details."
 
-      # Database Query Errors
+      # Database Query Errors (using Prometheus metrics)
       - alert: DatabaseQueryErrors
         expr: |
-          sum(count_over_time({service="registry-proxy", level="error"} |= "Failed to query enhanced servers"[5m])) > 5
+          rate(registry_proxy_database_query_errors_total{operation="enhanced_servers"}[5m]) > 0.1
         for: 2m
         labels:
           severity: critical
           category: database
         annotations:
           summary: "Database query failures on Registry Proxy"
-          description: "Registry Proxy has {{ $value }} database query failures in the last 5 minutes. Check database connectivity and query syntax."
+          description: "Registry Proxy is experiencing {{ $value | humanize }} database query errors/sec. Check database connectivity and query syntax."
 
-      # Array Parameter Errors (our specific fix)
+      # Array Parameter Errors (using Prometheus metrics)
       - alert: ArrayParameterErrors
         expr: |
-          sum(count_over_time({service="registry-proxy", level="error"} |= "pq: op ANY/ALL (array) requires array on right side"[5m])) > 0
+          rate(registry_proxy_database_errors_total{error_type="array_parameter"}[5m]) > 0
         for: 1m
         labels:
           severity: critical
           category: database
         annotations:
           summary: "PostgreSQL array parameter errors detected"
-          description: "Registry Proxy is experiencing PostgreSQL array parameter errors. This indicates the query builder fix may not have been applied correctly."
+          description: "Registry Proxy is experiencing PostgreSQL array parameter errors ({{ $value | humanize }} errors/sec). This indicates the query builder fix may not have been applied correctly."
 
-      # Filter Parameter Errors
+      # Filter Parameter Errors (using Prometheus metrics)
       - alert: FilterParameterErrors
         expr: |
-          sum(count_over_time({service="registry-proxy", level="error", endpoint="/v0/enhanced/servers"} |~ "registry_types|transports|tags"[5m])) > 5
+          sum(rate(registry_proxy_filter_errors_total{endpoint="/v0/enhanced/servers"}[5m])) > 0.1
         for: 2m
         labels:
           severity: warning
           category: errors
         annotations:
           summary: "Filter parameter errors on Enhanced endpoint"
-          description: "The /v0/enhanced/servers endpoint is experiencing {{ $value }} filter-related errors. Check registry_types, transports, and tags parameters."
+          description: "The /v0/enhanced/servers endpoint is experiencing {{ $value | humanize }} filter errors/sec. Check registry_types, transports, and tags parameters."
