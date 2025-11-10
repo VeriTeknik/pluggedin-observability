@@ -1,0 +1,366 @@
+groups:
+  # ==================================================
+  # Service Health & Availability
+  # ==================================================
+  - name: pluggedin_app_service_health
+    interval: 30s
+    rules:
+      - alert: PluggedinAppDown
+        expr: up{job="pluggedin-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: availability
+        annotations:
+          summary: "Plugged.in application is down"
+          description: "The pluggedin-app service has been down for more than 2 minutes. No metrics are being scraped."
+          runbook: "1. Check if the application is running: systemctl status pluggedin\n2. Check application logs: journalctl -u pluggedin -n 100\n3. Verify port 12005 is accessible\n4. Check for crashes or OOM kills"
+
+      - alert: PluggedinAppHealthCheckFailing
+        expr: up{job="pluggedin-app", endpoint="/api/health"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: availability
+        annotations:
+          summary: "Plugged.in health check failing"
+          description: "The /api/health endpoint is not returning 200 OK for more than 3 minutes."
+          runbook: "1. Check database connectivity\n2. Review application error logs\n3. Check system resources (CPU, memory, disk)"
+
+      - alert: PluggedinAppHighErrorRate
+        expr: (rate(pluggedin_http_errors_total{job="pluggedin-app"}[5m]) / rate(pluggedin_http_requests_total{job="pluggedin-app"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: errors
+        annotations:
+          summary: "High error rate detected in pluggedin-app"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%). Check application logs for details."
+          runbook: "1. Query Loki for recent errors: {service=\"pluggedin-app\", level=\"error\"}\n2. Check specific endpoint errors\n3. Review recent deployments or changes"
+
+      - alert: PluggedinAppCriticalErrorRate
+        expr: (rate(pluggedin_http_errors_total{job="pluggedin-app"}[5m]) / rate(pluggedin_http_requests_total{job="pluggedin-app"}[5m])) > 0.15
+        for: 3m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: errors
+        annotations:
+          summary: "CRITICAL: Very high error rate in pluggedin-app"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 15%). Immediate attention required."
+          runbook: "1. Consider rollback if recent deployment\n2. Check database and external service health\n3. Review error logs urgently\n4. Scale down traffic if needed"
+
+  # ==================================================
+  # Performance & Latency
+  # ==================================================
+  - name: pluggedin_app_performance
+    interval: 30s
+    rules:
+      - alert: PluggedinAppHighLatency
+        expr: histogram_quantile(0.95, rate(pluggedin_http_request_duration_seconds_bucket{job="pluggedin-app"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: performance
+        annotations:
+          summary: "High latency detected in pluggedin-app"
+          description: "P95 latency is {{ $value }}s (threshold: 2s). Application may be experiencing performance degradation."
+          runbook: "1. Check slow query logs\n2. Review CPU and memory usage\n3. Check for database connection pool exhaustion\n4. Investigate slow API endpoints"
+
+      - alert: PluggedinAppVeryHighLatency
+        expr: histogram_quantile(0.95, rate(pluggedin_http_request_duration_seconds_bucket{job="pluggedin-app"}[5m])) > 5
+        for: 3m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: performance
+        annotations:
+          summary: "CRITICAL: Very high latency in pluggedin-app"
+          description: "P95 latency is {{ $value }}s (threshold: 5s). Severe performance degradation detected."
+          runbook: "1. Immediate investigation required\n2. Check for deadlocks or blocked queries\n3. Review system resources\n4. Consider emergency scaling"
+
+      - alert: PluggedinAppSlowApiEndpoints
+        expr: histogram_quantile(0.95, rate(pluggedin_http_request_duration_seconds_bucket{job="pluggedin-app", path=~"/api/.*"}[5m])) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: performance
+        annotations:
+          summary: "Slow API endpoint detected"
+          description: "API endpoint {{ $labels.path }} P95 latency is {{ $value }}s (threshold: 3s)"
+          runbook: "1. Identify slow endpoint from metrics\n2. Check database query performance\n3. Review recent code changes\n4. Consider caching strategies"
+
+  # ==================================================
+  # Resource Usage
+  # ==================================================
+  - name: pluggedin_app_resources
+    interval: 30s
+    rules:
+      - alert: PluggedinAppHighMemoryUsage
+        expr: (pluggedin_nodejs_heap_size_used_bytes{job="pluggedin-app"} / pluggedin_nodejs_heap_size_total_bytes{job="pluggedin-app"}) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: resources
+        annotations:
+          summary: "High memory usage in pluggedin-app"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 80%). Risk of OOM."
+          runbook: "1. Check for memory leaks\n2. Review heap dump if available\n3. Restart service if needed\n4. Consider increasing heap size"
+
+      - alert: PluggedinAppCriticalMemoryUsage
+        expr: (pluggedin_nodejs_heap_size_used_bytes{job="pluggedin-app"} / pluggedin_nodejs_heap_size_total_bytes{job="pluggedin-app"}) > 0.90
+        for: 5m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: resources
+        annotations:
+          summary: "CRITICAL: Memory exhaustion imminent"
+          description: "Memory usage is {{ $value | humanizePercentage }} (threshold: 90%). OOM crash likely."
+          runbook: "1. Restart application immediately if safe\n2. Investigate memory leak urgently\n3. Scale horizontally if possible"
+
+      - alert: PluggedinAppHighCpuUsage
+        expr: rate(pluggedin_process_cpu_user_seconds_total{job="pluggedin-app"}[5m]) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: resources
+        annotations:
+          summary: "High CPU usage in pluggedin-app"
+          description: "CPU usage is {{ $value | humanizePercentage }} (threshold: 80%) for more than 10 minutes."
+          runbook: "1. Check for CPU-intensive operations\n2. Review recent code changes\n3. Check for infinite loops or hot paths\n4. Consider horizontal scaling"
+
+      - alert: PluggedinAppEventLoopLag
+        expr: pluggedin_nodejs_eventloop_lag_seconds{job="pluggedin-app"} > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: performance
+        annotations:
+          summary: "High event loop lag detected"
+          description: "Event loop lag is {{ $value }}s (threshold: 0.1s). Node.js process is blocked."
+          runbook: "1. Check for blocking synchronous operations\n2. Review CPU usage\n3. Identify long-running functions\n4. Consider offloading heavy work to workers"
+
+  # ==================================================
+  # Database Operations
+  # ==================================================
+  - name: pluggedin_app_database
+    interval: 30s
+    rules:
+      - alert: PluggedinAppDatabaseDown
+        expr: pluggedin_database_connections_active{job="pluggedin-app"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: database
+        annotations:
+          summary: "Database connection lost"
+          description: "No active database connections detected for more than 3 minutes."
+          runbook: "1. Check PostgreSQL service status\n2. Verify network connectivity\n3. Check connection string and credentials\n4. Review firewall rules"
+
+      - alert: PluggedinAppSlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(pluggedin_database_query_duration_seconds_bucket{job="pluggedin-app"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "P95 database query duration is {{ $value }}s (threshold: 1s)."
+          runbook: "1. Check pg_stat_activity for slow queries\n2. Review query execution plans\n3. Check for missing indexes\n4. Consider query optimization"
+
+      - alert: PluggedinAppHighDatabaseErrorRate
+        expr: rate(pluggedin_database_queries_total{success="false"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: database
+        annotations:
+          summary: "High database error rate"
+          description: "Database errors at {{ $value }}/sec (threshold: 0.1/sec)."
+          runbook: "1. Check database logs\n2. Verify connection pool settings\n3. Check for constraint violations\n4. Review recent schema changes"
+
+  # ==================================================
+  # Authentication & Security
+  # ==================================================
+  - name: pluggedin_app_security
+    interval: 30s
+    rules:
+      - alert: PluggedinAppAuthFailureSpike
+        expr: rate(pluggedin_auth_events_total{event_type="login_failure"}[5m]) > 1
+        for: 3m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: security
+        annotations:
+          summary: "Authentication failure spike detected"
+          description: "Login failures at {{ $value }}/sec (threshold: 1/sec). Possible brute force attack."
+          runbook: "1. Check Loki for failed login attempts: {service=\"pluggedin-app\", event=\"auth\", level=\"warn\"}\n2. Review source IPs\n3. Consider temporary rate limit tightening\n4. Check for credential stuffing patterns"
+
+      - alert: PluggedinAppHighRateLimitHits
+        expr: rate(pluggedin_http_errors_total{error_type="rate_limit"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: info
+          service: pluggedin-app
+          category: security
+        annotations:
+          summary: "High rate limit hits"
+          description: "Rate limit exceeded {{ $value }} times/sec (threshold: 5/sec)."
+          runbook: "1. Check if legitimate traffic spike\n2. Review rate limit configuration\n3. Identify top offending IPs\n4. Consider IP blocking if malicious"
+
+      - alert: PluggedinAppUnauthorizedAccessAttempts
+        expr: rate(pluggedin_http_errors_total{error_type="unauthorized"}[5m]) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: security
+        annotations:
+          summary: "High unauthorized access attempts"
+          description: "401 errors at {{ $value }}/sec (threshold: 2/sec)."
+          runbook: "1. Check for expired tokens\n2. Review authentication flow\n3. Verify JWT configuration\n4. Check for API key leaks"
+
+  # ==================================================
+  # Business Metrics & User Activity
+  # ==================================================
+  - name: pluggedin_app_business
+    interval: 60s
+    rules:
+      - alert: PluggedinAppNoUserActivity
+        expr: rate(pluggedin_http_requests_total{user_type="authenticated"}[10m]) == 0
+        for: 15m
+        labels:
+          severity: info
+          service: pluggedin-app
+          category: business
+        annotations:
+          summary: "No authenticated user activity detected"
+          description: "No requests from authenticated users in the last 15 minutes."
+          runbook: "1. Check if expected (off-peak hours)\n2. Verify authentication service\n3. Check if outage notification needed"
+
+      - alert: PluggedinAppHighDocumentUploadFailures
+        expr: rate(pluggedin_document_operations_total{operation="upload", status="failure"}[5m]) / rate(pluggedin_document_operations_total{operation="upload"}[5m]) > 0.20
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: business
+        annotations:
+          summary: "High document upload failure rate"
+          description: "Document upload failure rate is {{ $value | humanizePercentage }} (threshold: 20%)."
+          runbook: "1. Check storage availability\n2. Verify file size limits\n3. Review upload error logs\n4. Check RAG backend health"
+
+      - alert: PluggedinAppSlowDocumentProcessing
+        expr: histogram_quantile(0.95, rate(pluggedin_document_processing_duration_seconds_bucket{job="pluggedin-app"}[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: performance
+        annotations:
+          summary: "Slow document processing"
+          description: "P95 document processing time is {{ $value }}s (threshold: 30s)."
+          runbook: "1. Check RAG backend performance\n2. Review document sizes\n3. Check vector database (Milvus) health\n4. Verify embedding API availability"
+
+  # ==================================================
+  # MCP Integration Health
+  # ==================================================
+  - name: pluggedin_app_mcp_integration
+    interval: 30s
+    rules:
+      - alert: PluggedinAppMcpProxyDown
+        expr: up{job="mcp-proxy"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: mcp
+        annotations:
+          summary: "MCP proxy is down"
+          description: "The MCP proxy service has been down for more than 5 minutes. MCP features unavailable."
+          runbook: "1. Check MCP proxy service status\n2. Review proxy logs\n3. Verify network connectivity\n4. Check if MCP servers are accessible"
+
+      - alert: PluggedinAppHighMcpErrorRate
+        expr: rate(mcp_errors_total{service="pluggedin-app"}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: mcp
+        annotations:
+          summary: "High MCP operation error rate"
+          description: "MCP errors at {{ $value }}/sec (threshold: 0.5/sec)."
+          runbook: "1. Check MCP proxy health\n2. Review failing MCP servers\n3. Check OAuth token validity\n4. Review MCP server configurations"
+
+  # ==================================================
+  # External Dependencies
+  # ==================================================
+  - name: pluggedin_app_dependencies
+    interval: 60s
+    rules:
+      - alert: PluggedinAppRagBackendDown
+        expr: up{job="api-server"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: dependencies
+        annotations:
+          summary: "RAG backend (api.plugged.in) is down"
+          description: "The RAG backend has been unreachable for more than 5 minutes. Document features unavailable."
+          runbook: "1. Check api.plugged.in service status\n2. Verify Milvus vector database\n3. Check PostgreSQL connection\n4. Review FastAPI logs"
+
+      - alert: PluggedinAppRegistryProxyDown
+        expr: up{job="registry-proxy"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: dependencies
+        annotations:
+          summary: "Registry proxy is down"
+          description: "The MCP registry proxy has been unreachable for more than 5 minutes."
+          runbook: "1. Check registry-proxy service\n2. Verify PostgreSQL connection\n3. Check Traefik routing\n4. Fall back to official registry if needed"
+
+  # ==================================================
+  # Deployment & Configuration
+  # ==================================================
+  - name: pluggedin_app_deployment
+    interval: 60s
+    rules:
+      - alert: PluggedinAppFrequentRestarts
+        expr: changes(pluggedin_process_start_time_seconds{job="pluggedin-app"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: stability
+        annotations:
+          summary: "Frequent application restarts detected"
+          description: "Application has restarted {{ $value }} times in the last 15 minutes."
+          runbook: "1. Check for crashes in logs\n2. Review OOM kills: dmesg | grep -i kill\n3. Check for unhandled exceptions\n4. Review systemd service configuration"
+
+      - alert: PluggedinAppConfigurationError
+        expr: rate(pluggedin_http_errors_total{path="/api/health", status_code="503"}[5m]) > 0
+        for: 3m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: configuration
+        annotations:
+          summary: "Configuration error detected"
+          description: "Health check returning 503. Likely configuration or dependency issue."
+          runbook: "1. Check environment variables\n2. Verify database connection string\n3. Check external service availability\n4. Review startup logs"
