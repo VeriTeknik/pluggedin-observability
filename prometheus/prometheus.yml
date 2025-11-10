@@ -45,13 +45,14 @@ scrape_configs:
         labels:
           service: 'containers'
 
-  # PostgreSQL Exporter
+  # PostgreSQL Exporter - Standalone Production Server
   - job_name: 'postgres'
     static_configs:
-      - targets: ['postgres-exporter:9187']
+      - targets: ['185.96.168.246:9187']
         labels:
           service: 'postgresql'
-          instance: 'main'
+          instance: 'production'
+          environment: 'production'
 
   # Plugged.in App (Next.js)
   - job_name: 'pluggedin-app'
