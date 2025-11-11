@@ -1,0 +1,332 @@
+groups:
+  # ==================================================
+  # Cardinality Monitoring Recording Rules
+  # ==================================================
+  # Precompute cardinality metrics for faster queries
+  # and reduced Prometheus load
+  # ==================================================
+
+  - name: cardinality_monitoring
+    interval: 60s
+    rules:
+      # Total unique series count by job
+      - record: job:series_count:total
+        expr: count by (job) ({__name__=~".+"})
+
+      # Total unique series count by metric name
+      - record: metric:series_count:total
+        expr: count by (__name__) ({__name__=~".+"})
+
+      # HTTP metrics path cardinality
+      - record: pluggedin_http:path_cardinality:total
+        expr: count(count by (path) (pluggedin_http_requests_total))
+
+      # HTTP metrics status code cardinality
+      - record: pluggedin_http:status_code_cardinality:total
+        expr: count(count by (status_code) (pluggedin_http_requests_total))
+
+      # HTTP metrics method cardinality
+      - record: pluggedin_http:method_cardinality:total
+        expr: count(count by (method) (pluggedin_http_requests_total))
+
+      # HTTP metrics label combination cardinality
+      - record: pluggedin_http:label_combinations:total
+        expr: count(count by (method, path, status_code) (pluggedin_http_requests_total))
+
+      # Series growth rate per hour
+      - record: prometheus:series_growth_rate:1h
+        expr: rate(prometheus_tsdb_symbol_table_size_bytes[1h])
+
+      # Memory usage per 1000 series
+      - record: prometheus:memory_per_series:bytes
+        expr: |
+          process_resident_memory_bytes{job="prometheus"}
+          /
+          count({__name__=~".+"})
+          * 1000
+
+  # ==================================================
+  # HTTP Performance Recording Rules
+  # ==================================================
+  # Precompute common HTTP metrics queries
+  # ==================================================
+
+  - name: http_performance
+    interval: 30s
+    rules:
+      # Request rate by service
+      - record: job:http_requests:rate5m
+        expr: sum by (job) (rate(pluggedin_http_requests_total[5m]))
+
+      # Request rate by path
+      - record: path:http_requests:rate5m
+        expr: sum by (path) (rate(pluggedin_http_requests_total[5m]))
+
+      # Error rate by service
+      - record: job:http_errors:rate5m
+        expr: sum by (job) (rate(pluggedin_http_errors_total[5m]))
+
+      # Error rate percentage by service
+      - record: job:http_error_rate:percentage5m
+        expr: |
+          100 * (
+            sum by (job) (rate(pluggedin_http_errors_total[5m]))
+            /
+            sum by (job) (rate(pluggedin_http_requests_total[5m]))
+          )
+
+      # Error rate percentage by path
+      - record: path:http_error_rate:percentage5m
+        expr: |
+          100 * (
+            sum by (path) (rate(pluggedin_http_errors_total[5m]))
+            /
+            sum by (path) (rate(pluggedin_http_requests_total[5m]))
+          )
+
+      # P50 latency by service
+      - record: job:http_request_duration:p50
+        expr: |
+          histogram_quantile(0.50,
+            sum by (job, le) (rate(pluggedin_http_request_duration_seconds_bucket[5m]))
+          )
+
+      # P95 latency by service
+      - record: job:http_request_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (job, le) (rate(pluggedin_http_request_duration_seconds_bucket[5m]))
+          )
+
+      # P99 latency by service
+      - record: job:http_request_duration:p99
+        expr: |
+          histogram_quantile(0.99,
+            sum by (job, le) (rate(pluggedin_http_request_duration_seconds_bucket[5m]))
+          )
+
+      # P95 latency by path
+      - record: path:http_request_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (path, le) (rate(pluggedin_http_request_duration_seconds_bucket[5m]))
+          )
+
+      # Average request size by path
+      - record: path:http_request_size:avg
+        expr: |
+          sum by (path) (rate(pluggedin_http_request_size_bytes_sum[5m]))
+          /
+          sum by (path) (rate(pluggedin_http_request_size_bytes_count[5m]))
+
+      # Average response size by path
+      - record: path:http_response_size:avg
+        expr: |
+          sum by (path) (rate(pluggedin_http_response_size_bytes_sum[5m]))
+          /
+          sum by (path) (rate(pluggedin_http_response_size_bytes_count[5m]))
+
+  # ==================================================
+  # Database Performance Recording Rules
+  # ==================================================
+
+  - name: database_performance
+    interval: 30s
+    rules:
+      # Query rate by operation
+      - record: operation:database_queries:rate5m
+        expr: sum by (operation) (rate(pluggedin_database_queries_total[5m]))
+
+      # Query error rate
+      - record: database:query_error_rate:percentage5m
+        expr: |
+          100 * (
+            sum(rate(pluggedin_database_queries_total{success="false"}[5m]))
+            /
+            sum(rate(pluggedin_database_queries_total[5m]))
+          )
+
+      # P95 query duration by operation
+      - record: operation:database_query_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (operation, le) (rate(pluggedin_database_query_duration_seconds_bucket[5m]))
+          )
+
+      # Average active connections
+      - record: database:connections_active:avg
+        expr: avg_over_time(pluggedin_database_connections_active[5m])
+
+  # ==================================================
+  # Node.js Runtime Recording Rules
+  # ==================================================
+
+  - name: nodejs_runtime
+    interval: 30s
+    rules:
+      # Memory usage percentage
+      - record: job:nodejs_memory_usage:percentage
+        expr: |
+          100 * (
+            pluggedin_nodejs_heap_size_used_bytes
+            /
+            pluggedin_nodejs_heap_size_total_bytes
+          )
+
+      # CPU usage rate
+      - record: job:nodejs_cpu_usage:rate5m
+        expr: rate(pluggedin_process_cpu_user_seconds_total[5m])
+
+      # Average event loop lag
+      - record: job:nodejs_eventloop_lag:avg
+        expr: avg_over_time(pluggedin_nodejs_eventloop_lag_seconds[5m])
+
+      # P95 event loop lag
+      - record: job:nodejs_eventloop_lag:p95
+        expr: pluggedin_nodejs_eventloop_lag_p95_seconds
+
+      # Active handles trend
+      - record: job:nodejs_active_handles:avg
+        expr: avg_over_time(pluggedin_nodejs_active_handles[5m])
+
+      # GC duration P95 by kind
+      - record: kind:nodejs_gc_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (kind, le) (rate(pluggedin_nodejs_gc_duration_seconds_bucket[5m]))
+          )
+
+  # ==================================================
+  # Authentication & Security Recording Rules
+  # ==================================================
+
+  - name: auth_security
+    interval: 30s
+    rules:
+      # Login failure rate
+      - record: auth:login_failures:rate5m
+        expr: sum(rate(pluggedin_auth_events_total{event_type="login_failure"}[5m]))
+
+      # Login success rate
+      - record: auth:login_success:rate5m
+        expr: sum(rate(pluggedin_auth_events_total{event_type="login_success"}[5m]))
+
+      # Login success percentage
+      - record: auth:login_success:percentage5m
+        expr: |
+          100 * (
+            sum(rate(pluggedin_auth_events_total{event_type="login_success"}[5m]))
+            /
+            (
+              sum(rate(pluggedin_auth_events_total{event_type="login_success"}[5m]))
+              +
+              sum(rate(pluggedin_auth_events_total{event_type="login_failure"}[5m]))
+            )
+          )
+
+      # Rate limit hits
+      - record: security:rate_limit_hits:rate5m
+        expr: sum(rate(pluggedin_http_errors_total{error_type="rate_limit"}[5m]))
+
+      # Unauthorized access attempts
+      - record: security:unauthorized_attempts:rate5m
+        expr: sum(rate(pluggedin_http_errors_total{error_type="unauthorized"}[5m]))
+
+  # ==================================================
+  # Document Processing Recording Rules
+  # ==================================================
+
+  - name: document_processing
+    interval: 30s
+    rules:
+      # Upload success rate
+      - record: documents:upload_success:rate5m
+        expr: sum(rate(pluggedin_document_operations_total{operation="upload", status="success"}[5m]))
+
+      # Upload failure rate
+      - record: documents:upload_failure:rate5m
+        expr: sum(rate(pluggedin_document_operations_total{operation="upload", status="failure"}[5m]))
+
+      # Upload success percentage
+      - record: documents:upload_success:percentage5m
+        expr: |
+          100 * (
+            sum(rate(pluggedin_document_operations_total{operation="upload", status="success"}[5m]))
+            /
+            sum(rate(pluggedin_document_operations_total{operation="upload"}[5m]))
+          )
+
+      # P95 processing duration
+      - record: documents:processing_duration:p95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(pluggedin_document_processing_duration_seconds_bucket[5m]))
+          )
+
+  # ==================================================
+  # SLI (Service Level Indicator) Recording Rules
+  # ==================================================
+  # Used for SLO monitoring and reporting
+  # ==================================================
+
+  - name: service_level_indicators
+    interval: 60s
+    rules:
+      # Availability SLI (successful requests / total requests)
+      - record: sli:availability:rate5m
+        expr: |
+          sum(rate(pluggedin_http_requests_total{status_code!~"5.."}[5m]))
+          /
+          sum(rate(pluggedin_http_requests_total[5m]))
+
+      # Latency SLI (requests faster than 2s / total requests)
+      - record: sli:latency:rate5m
+        expr: |
+          sum(rate(pluggedin_http_request_duration_seconds_bucket{le="2"}[5m]))
+          /
+          sum(rate(pluggedin_http_request_duration_seconds_count[5m]))
+
+      # Error budget consumption (1 - availability SLI)
+      - record: sli:error_budget:consumption5m
+        expr: 1 - sli:availability:rate5m
+
+      # Overall health score (0-100)
+      - record: sli:health_score:current
+        expr: |
+          (
+            sli:availability:rate5m * 40 +
+            sli:latency:rate5m * 40 +
+            (1 - clamp_max(job:http_error_rate:percentage5m / 100, 1)) * 20
+          ) * 100
+
+  # ==================================================
+  # Cardinality Alert Supporting Metrics
+  # ==================================================
+
+  - name: cardinality_alerts
+    interval: 60s
+    rules:
+      # Detect paths with UUID patterns (should be normalized)
+      - record: http:unnormalized_uuids:count
+        expr: |
+          count(
+            count by (path) (
+              pluggedin_http_requests_total{path=~".*/[0-9a-f]{8}-[0-9a-f]{4}.*"}
+            )
+          )
+
+      # Detect paths with numeric IDs (should be normalized)
+      - record: http:unnormalized_ids:count
+        expr: |
+          count(
+            count by (path) (
+              pluggedin_http_requests_total{path=~".*/[0-9]{5,}.*"}
+            )
+          )
+
+      # Series count change over 1h
+      - record: prometheus:series_count:delta1h
+        expr: |
+          count({__name__=~".+"})
+          -
+          count({__name__=~".+"} offset 1h)

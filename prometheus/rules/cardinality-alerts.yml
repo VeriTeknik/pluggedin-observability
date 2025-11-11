@@ -1,0 +1,357 @@
+groups:
+  # ==================================================
+  # Metric Cardinality Alerts
+  # ==================================================
+  # These alerts detect and warn about high cardinality
+  # metrics that could impact Prometheus performance
+  # ==================================================
+
+  - name: metric_cardinality_monitoring
+    interval: 60s
+    rules:
+      # ==================================================
+      # High Cardinality Detection
+      # ==================================================
+
+      - alert: HighHTTPMetricCardinality
+        expr: pluggedin_http:path_cardinality:total > 200
+        for: 10m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: observability
+          cardinality: path
+        annotations:
+          summary: "High cardinality in HTTP path metrics"
+          description: |
+            HTTP metrics have {{ $value }} unique path labels (threshold: 200).
+            This indicates path normalization may be failing for some endpoints.
+          runbook: |
+            1. Query all paths: `group by (path) (pluggedin_http_requests_total)`
+            2. Look for unnormalized patterns:
+               - UUIDs: /api/servers/123e4567-e89b-12d3-a456-426614174000
+               - IDs: /api/users/12345
+               - Tokens: /auth/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
+            3. Update lib/observability/http-metrics.ts normalizePath() function
+            4. Add missing patterns to regex array
+            5. Add test cases to tests/lib/http-metrics.test.ts
+            6. Deploy fix and monitor cardinality
+
+      - alert: CriticalHTTPMetricCardinality
+        expr: pluggedin_http:path_cardinality:total > 500
+        for: 5m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: observability
+          cardinality: path
+        annotations:
+          summary: "CRITICAL: Extremely high cardinality in HTTP metrics"
+          description: |
+            HTTP metrics have {{ $value }} unique path labels (threshold: 500).
+            This will cause serious Prometheus performance issues.
+            IMMEDIATE ACTION REQUIRED.
+          runbook: |
+            EMERGENCY RESPONSE:
+            1. Identify the source immediately:
+               `topk(50, count by (path) (pluggedin_http_requests_total))`
+            2. Check recent deployments or config changes
+            3. Consider emergency Prometheus restart: `docker-compose restart prometheus`
+            4. Implement hotfix to normalizePath() function
+            5. Consider rate limiting or disabling problematic endpoint
+            6. Post-incident: Add regression tests
+
+      - alert: HighLabelCombinationCardinality
+        expr: pluggedin_http:label_combinations:total > 2500
+        for: 15m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: observability
+          cardinality: combinations
+        annotations:
+          summary: "High cardinality in HTTP metric label combinations"
+          description: |
+            HTTP metrics have {{ $value }} unique label combinations (threshold: 2500).
+            Expected: ~5 methods × ~50 paths × ~10 status codes = ~2,500
+          runbook: |
+            1. Check cardinality by label:
+               - Paths: `count(count by (path) (pluggedin_http_requests_total))`
+               - Methods: `count(count by (method) (pluggedin_http_requests_total))`
+               - Status codes: `count(count by (status_code) (pluggedin_http_requests_total))`
+            2. Identify which label has unexpected cardinality
+            3. Review recent code changes that added new endpoints or status codes
+
+      # ==================================================
+      # Unbounded Growth Detection
+      # ==================================================
+
+      - alert: UnboundedSeriesGrowth
+        expr: prometheus:series_growth_rate:1h > 1000000  # 1MB/hour
+        for: 30m
+        labels:
+          severity: critical
+          service: pluggedin-app
+          category: observability
+          cardinality: growth
+        annotations:
+          summary: "Unbounded time series growth detected"
+          description: |
+            Prometheus time series growing at {{ $value | humanize }}bytes/hour.
+            This indicates a critical cardinality issue causing continuous series creation.
+          runbook: |
+            CRITICAL ISSUE - Time series are being created continuously.
+            1. Identify source metric: `topk(10, count by (__name__) ({__name__=~".+"}))`
+            2. Check series count by job: `count by (job) ({__name__=~".+"})`
+            3. Review recent code deployments
+            4. Check for metrics with unbounded labels (user_ids, session_ids, timestamps)
+            5. Emergency action: Consider stopping metric collection or restarting Prometheus
+            6. Long-term: Fix metric definition to remove unbounded labels
+
+      - alert: SuspiciousSeriesIncrease
+        expr: prometheus:series_count:delta1h > 10000
+        for: 15m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: observability
+          cardinality: growth
+        annotations:
+          summary: "Suspicious increase in time series count"
+          description: |
+            Prometheus gained {{ $value }} new time series in the last hour (threshold: 10,000).
+            This is unusual and may indicate a cardinality issue.
+          runbook: |
+            1. Compare current vs 1 hour ago:
+               - Current: `count({__name__=~".+"})`
+               - 1h ago: `count({__name__=~".+"} offset 1h)`
+            2. Identify new metrics: Check Prometheus UI for recently added metrics
+            3. Review deployments in the last hour
+            4. Check if this is expected (e.g., new feature rollout)
+            5. If unexpected, investigate and potentially rollback
+
+      # ==================================================
+      # Path Normalization Validation
+      # ==================================================
+
+      - alert: UnnormalizedUUIDsInPaths
+        expr: http:unnormalized_uuids:count > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: observability
+          cardinality: normalization
+        annotations:
+          summary: "UUID patterns detected in HTTP paths (should be normalized)"
+          description: |
+            Found {{ $value }} paths containing UUID patterns that should have been normalized to :uuid.
+            Example: /api/servers/123e4567-... should be /api/servers/:uuid
+          runbook: |
+            1. Query affected paths:
+               `group by (path) (pluggedin_http_requests_total{path=~".*/[0-9a-f]{8}-[0-9a-f]{4}.*"})`
+            2. Check normalizePath() UUID regex in lib/observability/http-metrics.ts:
+               - Current pattern: `/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi`
+            3. Verify regex is correct and applied before other patterns
+            4. Add test case for the specific path pattern
+            5. Deploy fix
+
+      - alert: UnnormalizedNumericIDsInPaths
+        expr: http:unnormalized_ids:count > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: pluggedin-app
+          category: observability
+          cardinality: normalization
+        annotations:
+          summary: "Long numeric IDs detected in HTTP paths (should be normalized)"
+          description: |
+            Found {{ $value }} paths containing long numeric IDs (5+ digits) that should be normalized to :id.
+            Example: /api/users/12345 should be /api/users/:id
+          runbook: |
+            1. Query affected paths:
+               `group by (path) (pluggedin_http_requests_total{path=~".*/[0-9]{5,}.*"})`
+            2. Check normalizePath() numeric ID regex:
+               - Current pattern: `/\/\d+(?=\/|$)/g`
+            3. Ensure pattern appears AFTER hash and token patterns (pattern order matters)
+            4. Add test case
+            5. Deploy fix
+
+      # ==================================================
+      # Memory & Performance Impact
+      # ==================================================
+
+      - alert: HighMemoryPerSeries
+        expr: prometheus:memory_per_series:bytes > 5000  # 5KB per 1000 series
+        for: 15m
+        labels:
+          severity: warning
+          service: prometheus
+          category: observability
+          cardinality: memory
+        annotations:
+          summary: "High memory usage per time series"
+          description: |
+            Prometheus using {{ $value | humanize }}bytes per 1000 series (threshold: 5KB).
+            This indicates inefficient series or label usage.
+          runbook: |
+            1. Check total memory: `process_resident_memory_bytes{job="prometheus"} / 1024^3` (GB)
+            2. Check series count: `count({__name__=~".+"})`
+            3. Identify high-cardinality metrics: `topk(10, count by (__name__) ({__name__=~".+"}))`
+            4. Review metrics with long label values (increase memory per series)
+            5. Consider:
+               - Reducing retention period
+               - Removing unused metrics
+               - Shortening label values
+               - Increasing Prometheus memory limit
+
+      - alert: PrometheusHighMemoryUsage
+        expr: |
+          (
+            process_resident_memory_bytes{job="prometheus"}
+            /
+            (container_spec_memory_limit_bytes{name=~".*prometheus.*"} > 0)
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: critical
+          service: prometheus
+          category: observability
+          cardinality: memory
+        annotations:
+          summary: "Prometheus memory usage is critically high"
+          description: |
+            Prometheus memory usage at {{ $value | humanizePercentage }} of limit.
+            High cardinality metrics may be causing excessive memory consumption.
+          runbook: |
+            URGENT: Prometheus may run out of memory soon.
+            1. Check series count: `count({__name__=~".+"})`
+            2. Identify top metrics: `topk(20, count by (__name__) ({__name__=~".+"}))`
+            3. Emergency actions:
+               - Restart Prometheus to clear in-memory data: `docker-compose restart prometheus`
+               - Temporarily disable problematic scrape jobs
+               - Reduce retention: Add `--storage.tsdb.retention.time=7d` to Prometheus args
+            4. Long-term fix:
+               - Fix high-cardinality metrics
+               - Increase Prometheus memory limit
+               - Implement recording rules to reduce query load
+
+      # ==================================================
+      # Business Impact Alerts
+      # ==================================================
+
+      - alert: CardinalityImpactingQueryPerformance
+        expr: |
+          rate(prometheus_engine_query_duration_seconds_sum[5m])
+          /
+          rate(prometheus_engine_query_duration_seconds_count[5m])
+          > 5
+        for: 10m
+        labels:
+          severity: warning
+          service: prometheus
+          category: observability
+          cardinality: performance
+        annotations:
+          summary: "High cardinality impacting Prometheus query performance"
+          description: |
+            Average query duration is {{ $value }}s (threshold: 5s).
+            This likely indicates high cardinality is degrading query performance.
+          runbook: |
+            1. Check if this correlates with high series count
+            2. Review slow queries in Prometheus logs
+            3. Identify queries with high label cardinality
+            4. Implement recording rules for frequently-queried metrics
+            5. Consider query optimization or metric reduction
+
+      - alert: GrafanaDashboardsSlowDueToCardinality
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(grafana_http_request_duration_seconds_bucket[5m]))
+          ) > 10
+        for: 10m
+        labels:
+          severity: warning
+          service: grafana
+          category: observability
+          cardinality: ux
+        annotations:
+          summary: "Grafana dashboards slow (likely due to high cardinality)"
+          description: |
+            Grafana P95 response time is {{ $value }}s (threshold: 10s).
+            Users experiencing slow dashboard loads, possibly due to high-cardinality queries.
+          runbook: |
+            1. Check Prometheus query performance (see CardinalityImpactingQueryPerformance)
+            2. Review Grafana queries for high-cardinality aggregations
+            3. Implement recording rules for complex queries
+            4. Consider dashboard optimization:
+               - Reduce query time range
+               - Use pre-aggregated recording rules
+               - Limit series in dashboard queries
+
+  # ==================================================
+  # Proactive Cardinality Monitoring
+  # ==================================================
+
+  - name: cardinality_trends
+    interval: 300s  # 5 minutes
+    rules:
+      - alert: CardinalityGrowthTrend
+        expr: |
+          (
+            (
+              count({__name__=~".+"})
+              -
+              count({__name__=~".+"} offset 24h)
+            )
+            /
+            count({__name__=~".+"} offset 24h)
+          ) > 0.20
+        for: 1h
+        labels:
+          severity: info
+          service: pluggedin-app
+          category: observability
+          cardinality: trend
+        annotations:
+          summary: "Time series count growing faster than expected"
+          description: |
+            Series count increased by {{ $value | humanizePercentage }} in the last 24 hours (threshold: 20%).
+            This may indicate a gradual cardinality issue developing.
+          runbook: |
+            INFO ALERT - Not urgent, but requires investigation.
+            1. Compare series count: now vs 24h ago
+            2. Check if growth is expected (new features, increased traffic)
+            3. Review metrics added in last 24 hours
+            4. Monitor trend over next few days
+            5. If growth continues, investigate specific metrics causing growth
+
+      - alert: UnexpectedNewMetrics
+        expr: |
+          count(
+            count by (__name__) ({__name__=~".+"})
+            unless
+            count by (__name__) ({__name__=~".+"} offset 6h)
+          ) > 10
+        for: 30m
+        labels:
+          severity: info
+          service: pluggedin-app
+          category: observability
+          cardinality: new_metrics
+        annotations:
+          summary: "Unexpected new metrics detected"
+          description: |
+            {{ $value }} new metric names appeared in the last 6 hours.
+            Verify this is expected (e.g., new feature deployment).
+          runbook: |
+            1. List new metrics:
+               ```
+               count by (__name__) ({__name__=~".+"})
+               unless
+               count by (__name__) ({__name__=~".+"} offset 6h)
+               ```
+            2. Cross-reference with recent deployments
+            3. Verify cardinality of new metrics is reasonable
+            4. Update dashboards and alerts for new metrics if needed

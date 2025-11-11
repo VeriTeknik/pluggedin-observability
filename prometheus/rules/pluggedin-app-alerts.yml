@@ -17,17 +17,11 @@ groups:
           description: "The pluggedin-app service has been down for more than 2 minutes. No metrics are being scraped."
           runbook: "1. Check if the application is running: systemctl status pluggedin\n2. Check application logs: journalctl -u pluggedin -n 100\n3. Verify port 12005 is accessible\n4. Check for crashes or OOM kills"
 
-      - alert: PluggedinAppHealthCheckFailing
-        expr: up{job="pluggedin-app", endpoint="/api/health"} == 0
-        for: 3m
-        labels:
-          severity: critical
-          service: pluggedin-app
-          category: availability
-        annotations:
-          summary: "Plugged.in health check failing"
-          description: "The /api/health endpoint is not returning 200 OK for more than 3 minutes."
-          runbook: "1. Check database connectivity\n2. Review application error logs\n3. Check system resources (CPU, memory, disk)"
+      # Note: Health check monitoring relies on:
+      # 1. The 'up' metric (service is scrapeable)
+      # 2. HTTP error metrics for /api/health endpoint
+      # 3. Database connectivity check (part of health endpoint)
+      # If the service is up but health endpoint fails, the PluggedinAppConfigurationError alert will fire
 
       - alert: PluggedinAppHighErrorRate
         expr: (rate(pluggedin_http_errors_total{job="pluggedin-app"}[5m]) / rate(pluggedin_http_requests_total{job="pluggedin-app"}[5m])) > 0.05
